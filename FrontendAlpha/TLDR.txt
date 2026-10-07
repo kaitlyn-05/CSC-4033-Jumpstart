@@ -1,0 +1,41 @@
+JumpStart Frontend Documentation 
+by Austin Pearson
+______________________________________________________________
+Packages and APIs
+- uses React, babel, Webpack, and Nodejs
+______________________________________________________________
+Programming languages:
+- html
+- js and jsx
+- css 
+______________________________________________________________
+Description of each file/folder:
+Folders:
+
+"node_modules"
+- Contains React, Webpack, Babel, and the other packages JumpStart depends on. 
+  npm creates and manages this folder.
+
+"src"
+- Contains all source files for Jumpstart Frontend.
+______________________________________________________________
+Files:
+
+"index.html"
+- Sets browser title and has the "root" for React to display the Frontend.
+
+"index.jsx"
+- It defines the starting application component and sends it to "root".
+
+"styles.css"
+- Contains the formatting for the Frontend.
+
+"package.json"
+- Contains the packages, dependencies, and scripts needed for Frontend.
+
+"package-lock.json"
+- Contains exact versions of packages that npm downloaded.
+
+"Webpack.config.js"
+- Contains the configs for Webpack, Babel, and it controls the HTML page and 
+  local server hosting.
