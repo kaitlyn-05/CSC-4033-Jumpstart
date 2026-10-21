@@ -1,3 +1,4 @@
+
 -- 1. USERS
 CREATE TABLE [dbo].[users]
 (
@@ -241,7 +242,7 @@ CREATE INDEX [idx_project_comments_project_created]
 
 CREATE INDEX [idx_project_comments_parent]
     ON [dbo].[project_comments] ([project_id], [parent_comment_id]);
-  FOREIGN KEY ("user_id")
-  REFERENCES "users" ("user_id")
-  ON DELETE CASCADE
-  DEFERR
+
+-- =========================================
+-- END OF JUMPSTART SCHEMA
+-- =========================================
