@@ -1,15 +1,18 @@
-//uses webpack
+
 const path = require("path");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
-//Webpack config for React frontend
+
+// Webpack configuration for the React frontend
 module.exports = {
   mode: "development",
   entry: "./index.jsx",
+
   output: {
     path: path.resolve(__dirname, "dist"),
     filename: "bundle.js",
   },
-  //loads babel to convert jsx into js 
+
+  // Loads Babel to convert JSX into JavaScript
   module: {
     rules: [
       {
@@ -18,7 +21,10 @@ module.exports = {
         use: {
           loader: "babel-loader",
           options: {
-            presets: ["@babel/preset-env", "@babel/preset-react"],
+            presets: [
+              "@babel/preset-env",
+              ["@babel/preset-react", { runtime: "classic" }],
+            ],
           },
         },
       },
@@ -28,27 +34,37 @@ module.exports = {
       },
     ],
   },
-  //Resolve file extensions for imports (lets you import js files without extension)
+
+  // Allows imports without specifying .js or .jsx
   resolve: {
     extensions: [".js", ".jsx"],
   },
-  //Plugins for HTML generation
+
+  // Generates the HTML file
   plugins: [
     new HtmlWebpackPlugin({
       template: "./index.html",
     }),
   ],
-  //Webpack server config (temporary)
-  // Webpack server config
-devServer: {
-  host: "localhost",
-  port: 3000,
-  open: true,
-  proxy: [
-    {
-      context: ["/api"],
-      target: "http://localhost:5000",
+
+  // Webpack development server
+  devServer: {
+    host: "localhost",
+    port: 3000,
+    open: true,
+
+    // Serves generated frontend files
+    static: {
+      directory: path.resolve(__dirname, "dist"),
     },
-  ],
-},
+
+    // Sends API requests to the Express backend
+    proxy: [
+      {
+        context: ["/api"],
+        target: "http://localhost:5000",
+        changeOrigin: true,
+      },
+    ],
+  },
 };

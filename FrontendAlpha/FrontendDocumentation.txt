@@ -1,0 +1,178 @@
+JumpStart Frontend Documentation 
+by Austin Pearson
+______________________________________________________________
+Packages and APIs
+- uses React, and Nodejs
+______________________________________________________________
+Programming languages:
+- html
+- jsx
+- css 
+______________________________________________________________
+Description of each file:
+
+1. main.jsx 
+Description: This file starts React and displays the application.
+
+- Imports are React's 'StrictMode' and 'createRoot' function, 
+  index.css, 
+  and the 'App' component from 'App.jsx'.
+Description of each:
+- createRoot() connects React to the HTML element with the ID 'root'.
+- render() displays the application inside that element.
+- StrictMode wraps the application with additional development checks to help identify potential problems.
+- App is the main component rendered by this file.
+--------------------------------------------------------------
+2. App.jsx
+Description: This file defines the screens, reusable components, project data, and user interactions.
+
+- Icon Function:
+	Displays an SVG icon based on its 'name' prop (mentioned below). 
+	It supports home, user, plus, exit, clock, comment, edit, trash, and search icons.
+	The 'paths' object holds the drawing instructions for each icon.
+
+- ProjectSummary Function:
+	Displays a project's name, description, an optional attachment filename, owner, and contributed hours. 
+	It is reused in the home list and contribution screen.
+
+- ProjectForm Function:
+	Provides the shared form for creating and editing projects. 
+	It receives existing project data and callbacks for saving or canceling.
+
+Function submit(event) prevents normal browser submission, reads the form fields, 
+	trims text, rejects empty names or descriptions, 
+	and passes the values to 'onSave'.
+onSave is a callback supplied by 'App' to create or update the project.
+onCancel is a callback supplied by 'App' to return to My Projects.
+
+Overall, the form collects a name, description, goal, and optional file. 
+	Only the filename is retained; the file is not uploaded.
+
+- App Function:
+	The main function that coordinates state, navigation, and displayed screen.
+
+Constants within App():
+| const 	| Purpose |
+| 'page' 	| Tracks the current screen |
+| 'projects' 	| Stores the project list |
+| 'selected' 	| Stores the project ID selected for contribution |
+| 'editing' 	| Stores the project being edited |
+| 'search' 	| Stores the search text |
+| 'hours' 	| Tracks the selected contribution option |
+| 'notice' 	| Stores feedback messages |
+| 'commentsFor' | Tracks which project's comments are open |
+| 'backend' 	| Stores the backend connection message |
+
+Functions and Effect within App():
+1. useEffect callback requests '/api/hello' when the component mounts, 
+	reads the returned message, and updates the connection status. 
+	Its cleanup function cancels a pending request.
+2. Function 'go(next) changes' the current screen, clears feedback, and closes comments.
+3. Function 'update(id, change)' updates a matching project by creating a new project 	object and array rather than changing the existing state directly.
+4. const selectedProject uses 'find()' to retrieve the project selected for contribution.
+5. const titles associates workspace screens with their displayed headings.
+
+Screen Sections and Event Handlers:
+NOTE: These sections are rendered inside 'App()'; they are not separate functions.
+
+| 	Section 	| Responsibility |
+| 	Welcome 	| Displays login and signup buttons and the backend status |
+| 	Login/Signup 	| Collects credentials; submission clears the form and opens Home |
+| 	Workspace Layout| Displays the current heading, content, and bottom navigation |
+| 	Home 		| Filters projects and renders matching cards |
+| 	Voting 		| Toggles a project's vote between upvote, 0, and downvote |
+| 	Comments 	| Opens or closes comments; submission trims and appends comment |
+| 	My Projects 	| Lists projects whose owner is 'You' and displays their progress |
+| 	Delete handler 	| Requests confirmation, removes the project, and displays feedback |
+|	Edit handler 	| Selects an existing project and opens the project form |
+| 	Create/Save 	| Updates an existing project or adds a new project with a generated ID |
+| 	Contribution 	| Offers preset or custom hours; submission validates and adds hours to the selected project |
+| 	Bottom Nav. 	| Switches screens; Create opens a blank form and Log Out returns to Welcome |
+
+--------------------------------------------------------------
+
+3. index.css 
+Description: This file holds the styles shared throughout the application. It contains the selectors and style rules.
+
+| Selector or Rule 	| Purpose |
+| ':root' 		| Sets the default font, text color, background, and font synthesis behavior |
+| '*' 			| Makes declared dimensions include padding and borders |
+| 'body' 		| Removes default page margins and sets a minimum width |
+| 'button, input, textarea' | Shares typography and square corners across controls |
+| 'button' 		| Sets the pointer cursor and inherited text color |
+| ':focus-visible' rules| Adds visible focus outlines to buttons and form fields |
+| 'button:hover' 	| Darkens buttons when hovered |
+| '#root' 		| Gives the React container a minimum viewport height |
+| '.sr-only' 		| Visually hides content while keeping it available to screen readers |
+
+--------------------------------------------------------------
+
+4. App.css 
+Description: This file styles the elements rendered by 'App.jsx'. 
+	A class selector such as '.welcome-page' matches JSX elements with 	'className="welcome-page"'.
+_______________________________________________________________________________________________
+| Style Group | Purpose & Main Selectors |
+| Welcome and Account Layouts 		| Arrange page contents, headings, and action buttons | 
+|					| '.welcome-page', '.account-page', '.welcome-actions'|
+_______________________________________________________________________________________________
+| Shared Buttons 			| Define primary, smaller, text-only, and secondary button appearances | 
+|					| '.blue-button', '.blue-button.small', '.text-button', '.gray-button' |
+_______________________________________________________________________________________________
+| Account Fields and Connection Status 	| Style connection feedback and account inputs 	|
+|					| '.backend-message', '.account-form'		|
+_______________________________________________________________________________________________
+| Workspace Structure 			| Set page spacing, header appearance, and content width|
+|					| '.app-shell', '.page-header', '.content' 		|
+_______________________________________________________________________________________________
+| Feedback 				| Style messages and hide empty notices 	|
+|					| '.demo-note', '.notice', '.notice:empty' 	|
+_______________________________________________________________________________________________
+| Search and Default Icons 		| Arrange the search controls and set default icon dimensions 	|
+|					| '.search-bar', 'svg' 						|
+_______________________________________________________________________________________________
+| Project Cards 			| Arrange cards and contribution controls 				     |
+|					| '.project-list', '.project-card', '.contribute-link', '.project-card-main' |
+_______________________________________________________________________________________________
+| Project Details 			| Style project text, headings, and metadata |
+| 					| '.project-summary', '.project-meta', 'h2'  |
+_______________________________________________________________________________________________
+| Project Actions 			| Arrange voting and comment buttons and highlight selected votes |
+|					| '.project-actions', '.comment-button', '[aria-pressed=true]'	  |
+_______________________________________________________________________________________________
+| Comments 				| Style comment text and the submission form 	|
+|					| '.comments' and its child selectors 		| 
+_______________________________________________________________________________________________
+| Bottom Navigation 			| Fix navigation to the screen bottom, position its buttons, and highlight the current screen 	|
+|					| '.bottom-nav', '.create-nav', '.exit-nav', '[aria-current=page]' 				|
+_______________________________________________________________________________________________
+| Owned Projects 			| Arrange owned-project details and management controls 		|
+|					| '.my-projects', '.owned-project', '.manage-actions', '.owned-summary' |
+_______________________________________________________________________________________________
+| Progress 				| Style goal labels, progress bars, and contributed-hour text 	|
+|					| '.progress' and its child selectors 				|
+_______________________________________________________________________________________________
+| Project Form 				| Style the create/edit form and its fields 			   |
+|					| '.project-form', '.project-form-panel', '.project-name', '#goal' |
+_______________________________________________________________________________________________
+| Attachments 				| Style and position the file selector  |
+|					| '.file-label' 			|
+_______________________________________________________________________________________________
+| Contributions 			| Arrange preset choices and custom-hour input  |
+|					| '.contribution', '.custom-hours' 		|
+_______________________________________________________________________________________________
+| Empty States 				| Style messages shown when lists contain no matching projects  |
+|					| '.empty-state' 						| 
+_______________________________________________________________________________________________
+| Small-Screen Adjustments 		| Reduce spacing and icon sizes and rearrange layouts for narrow screens |
+|					| '@media (max-width: 600px)' 						 | 
+_______________________________________________________________________________________________
+| Comment Post Button 			| Prevent the Post button from shrinking or wrapping its text 	|
+|					| '.comments .gray-button' 					|
+_______________________________________________________________________________________________
+
+--------------------------------------------------------------
+How the Files Work Together:
+	'main.jsx' starts the application and loads 'index.css'. 
+	It renders 'App.jsx', which manages the interface and imports 'App.css'.
+	The JSX assigns classes and IDs to elements, 
+	and the stylesheets use those selectors to control their appearance.
