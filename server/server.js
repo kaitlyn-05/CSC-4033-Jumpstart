@@ -1,6 +1,8 @@
 
  // Load the environment variables
-require("dotenv").config();
+require("dotenv").config({
+    path: require("path").join(__dirname, ".env")
+});
 
 const express = require("express");
 const cors = require("cors");
@@ -9,6 +11,7 @@ const cors = require("cors");
 const { Pool } = require("pg");
 
 const helloRoutes = require("./routes/hello");
+const projectRoutes = require("./routes/projects");
 
 const app = express();
 
@@ -23,12 +26,14 @@ const pool = new Pool({
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD
 });
-
+// Make the PostgreSQL connection pool accessible to all route files through the Express app.
+app.locals.pool = pool;
 app.use(cors());
 app.use(express.json());
 
 // Keep existing API routes
-app.use("/api", helloRoutes);
+app.use("/api/hello", helloRoutes);
+app.use("/api/projects", projectRoutes);
 
 // Test connection
 app.get("/api/projects-test", async (req, res) => {

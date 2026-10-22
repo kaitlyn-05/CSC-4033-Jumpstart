@@ -4,7 +4,7 @@ const HtmlWebpackPlugin = require("html-webpack-plugin");
 //Webpack config for React frontend
 module.exports = {
   mode: "development",
-  entry: "./src/index.jsx",
+  entry: "./index.jsx",
   output: {
     path: path.resolve(__dirname, "dist"),
     filename: "bundle.js",
@@ -35,13 +35,20 @@ module.exports = {
   //Plugins for HTML generation
   plugins: [
     new HtmlWebpackPlugin({
-      template: "./src/index.html",
+      template: "./index.html",
     }),
   ],
   //Webpack server config (temporary)
-  devServer: {
-    host: "localhost",
-    port: 3000,
-    open: true,
-  },
+  // Webpack server config
+devServer: {
+  host: "localhost",
+  port: 3000,
+  open: true,
+  proxy: [
+    {
+      context: ["/api"],
+      target: "http://localhost:5000",
+    },
+  ],
+},
 };

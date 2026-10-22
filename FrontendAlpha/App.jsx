@@ -66,17 +66,51 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [commentsFor, setCommentsFor] = useState(null);
   const [backend, setBackend] = useState('Checking backend connection…');
+  const [backendMessage, setBackendMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function sayHello() {
+    setLoading(true);
+    setBackendMessage('');
+
+    try {
+      const response = await fetch('/api/hello');
+
+      if (!response.ok) {
+        throw new Error('Request failed');
+      }
+
+      const data = await response.json();
+      setBackendMessage(data.message);
+    } catch (error) {
+      console.error(error);
+      setBackendMessage('Could not connect to backend.');
+    } finally {
+      setLoading(false);
+    }
+  }
   // Check the backend on mount; cleanup cancels any pending request.
-  useEffect(() => {
+    useEffect(() => {
     const controller = new AbortController();
-    fetch('/api/hello', { signal: controller.signal }).then(response => {
-      if (!response.ok) throw new Error('Connection failed');
-      return response.json();
-    }).then(data => setBackend(data.message)).catch(error => {
-      if (error.name !== 'AbortError') setBackend('Backend offline — demo still available');
-    });
+    
+    fetch('/api/hello', { signal: controller.signal })
+      .then(response => {
+        if (!response.ok) throw new Error('Connection failed');
+        return response.json();
+      })
+      .then(data => {
+        // Change the connection status text to reflect that it successfully loaded
+        setBackend('Connected to backend'); 
+      })
+      .catch(error => {
+        if (error.name !== 'AbortError') {
+          setBackend('Backend offline — demo still available');
+        }
+      });
+
     return () => controller.abort();
   }, []);
+
   // Clear feedback and close comments when navigating to another screen.
   function go(next) { setPage(next); setNotice(''); setCommentsFor(null); }
   // Merge changes into one project without mutating existing state objects.
@@ -85,12 +119,41 @@ export default function App() {
   const titles = { home: 'Jump Start', mine: 'My Projects', create: editing ? 'Edit Project' : 'Create Project', contribute: 'Contribute' };
 
   // Welcome and account screens render outside the main workspace layout.
-  if (page === 'welcome') return <main className="welcome-page">
-    <h1>Jump Start</h1><div className="welcome-actions">
-      <button className="blue-button" onClick={() => go('login')}>Log In</button>
-      <button className="blue-button small" onClick={() => go('signup')}>Create Account</button>
-    </div><p className="backend-message">{backend}</p>
-  </main>;
+    if (page === 'welcome') {
+    return (
+      <main className="welcome-page" style={{ padding: '20px', textAlign: 'center' }}>
+        <h1>Jump Start</h1>
+
+        <div className="welcome-actions" style={{ marginBottom: '20px' }}>
+          <button className="blue-button" onClick={() => go('login')}>
+            Log In
+          </button>
+          <button className="blue-button small" onClick={() => go('signup')}>
+            Create Account
+          </button>
+        </div>
+
+        <p className="backend-message">Connection status: {backend}</p>
+
+        {/* FORCED VISIBILITY BUTTON */}
+        <div style={{ marginTop: '30px', border: '1px dashed #ccc', padding: '15px' }}>
+          <button 
+            className="blue-button" 
+            onClick={sayHello} 
+            disabled={loading}
+            style={{ background: 'blue', color: 'white', padding: '10px 20px', cursor: 'pointer' }}
+          >
+            {loading ? 'Connecting...' : 'Say Hello to Backend'}
+          </button>
+        </div>
+
+        <p role="status" style={{ marginTop: '10px', fontWeight: 'bold' }}>
+          Backend Response: {backendMessage || 'No message yet'}
+        </p>
+      </main>
+    );
+  }
+
 
   if (page === 'login' || page === 'signup') return <main className="account-page">
     <h1 className="sr-only">{page === 'login' ? 'Log In' : 'Create Account'}</h1>
