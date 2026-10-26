@@ -42,6 +42,11 @@ function getPool() {
 app.use(cors());
 app.use(express.json());
 
+// test for api connection to Web App
+app.get('/', (req, res) => {
+  res.send('Jumpstart backend is running!');
+});
+
 // Keep existing API routes.
 app.use("/api", helloRoutes);
 
