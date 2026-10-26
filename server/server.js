@@ -7,6 +7,9 @@ const sql = require("mssql");
 
 const helloRoutes = require("./routes/hello");
 const projectRoutes = require("./routes/projects");
+const commentRoutes = require("./routes/comments");
+const contributorRoutes = require("./routes/contributors");
+const userRoutes = require("./routes/users");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -55,6 +58,9 @@ app.get("/", (req, res) => {
 // API routes
 app.use("/api/hello", helloRoutes);
 app.use("/api/projects", projectRoutes);
+app.use("/api/comments", commentRoutes);
+app.use("/api/contributors", contributorRoutes);
+app.use("/api/users", userRoutes);
 
 // Test the Azure SQL connection and projects table.
 app.get("/api/projects-test", async (req, res) => {
