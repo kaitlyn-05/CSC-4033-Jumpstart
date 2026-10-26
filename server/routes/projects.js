@@ -5,10 +5,9 @@ const router = express.Router();
 // Get all projects
 router.get("/", async (req, res) => {
     try {
-        // Use the PostgreSQL pool attached to the Express app
-        const pool = req.app.locals.pool;
+        const pool = req.app.locals.getPool;
 
-        const result = await pool.query(`
+        const result = await pool.request().query(`
             SELECT
                 p.project_id,
                 p.project_name,
@@ -18,18 +17,18 @@ router.get("/", async (req, res) => {
                 p.created_at,
                 u.username,
                 c.category_name
-            FROM projects p
-            JOIN users u
+            FROM dbo.projects AS p
+            INNER JOIN dbo.users AS u
                 ON p.owner_id = u.user_id
-            LEFT JOIN project_categories c
+            LEFT JOIN dbo.project_categories AS c
                 ON p.category_id = c.category_id
-            ORDER BY p.created_at DESC
+            ORDER BY p.created_at DESC;
         `);
 
         res.json({
             success: true,
-            count: result.rows.length,
-            projects: result.rows
+            count: result.recordset.length,
+            projects: result.recordset
         });
     } catch (error) {
     console.error("Failed to retrieve projects:", error);
