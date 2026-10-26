@@ -48,7 +48,7 @@ app.get('/', (req, res) => {
 });
 
 // Keep existing API routes.
-app.use("/api", helloRoutes);
+app.use("/api/hello", helloRoutes);
 
 // Test the Azure SQL connection and projects table.
 app.get("/api/projects-test", async (req, res) => {
