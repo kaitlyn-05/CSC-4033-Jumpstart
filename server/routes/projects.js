@@ -1,87 +1,107 @@
 
+  
 const express = require("express");
 const sql = require("mssql");
 
 const router = express.Router();
 
-// Helper: Validate positive integer IDs.
-function isPositiveInteger(value) {
-    return Number.isInteger(Number(value)) && Number(value) > 0;
-}
-
-// Helper: Get the database connection.
+// Get the database connection
 async function getDatabase(req) {
     return await req.app.locals.getPool();
 }
 
+// Check whether an ID is a positive integer
+function isPositiveInteger(value) {
+    return (
+        value !== undefined &&
+        value !== null &&
+        value !== "" &&
+        Number.isInteger(Number(value)) &&
+        Number(value) > 0
+    );
+}
+
+// Check whether goal hours is a positive decimal number
+function isPositiveNumber(value) {
+    return (
+        value !== undefined &&
+        value !== null &&
+        value !== "" &&
+        Number.isFinite(Number(value)) &&
+        Number(value) > 0 &&
+        Number(value) <= 99999999.99
+    );
+}
+
 // GET /api/projects
-// Retrieve projects with optional search, filters, sorting, and pagination.
+// Retrieve projects with optional search, filters, sorting, and pagination
 router.get("/", async (req, res) => {
     try {
         const pool = await getDatabase(req);
-        const request = pool.request();
 
         const {
             search,
             status,
             category_id,
             sort = "newest",
-            page = "1",
-            limit = "10"
+            page = 1,
+            limit = 20
         } = req.query;
 
-        const pageNumber = Number(page);
-        const pageLimit = Number(limit);
+        const pageNumber = isPositiveInteger(page) ? Number(page) : 1;
+        const pageSize = isPositiveInteger(limit)
+            ? Math.min(Number(limit), 100)
+            : 20;
 
-        if (
-            !Number.isInteger(pageNumber) || pageNumber < 1 ||
-            !Number.isInteger(pageLimit) || pageLimit < 1 || pageLimit > 100
-        ) {
-            return res.status(400).json({
-                success: false,
-                error: "Page must be positive and limit must be between 1 and 100."
-            });
-        }
+        const offset = (pageNumber - 1) * pageSize;
 
         let conditions = [];
+        let parameters = [];
 
-        // Search project name and description.
-        if (search) {
-            request.input(
-                "search",
-                sql.NVarChar(255),
-                `%${String(search).trim()}%`
-            );
-
+        if (search && typeof search === "string") {
             conditions.push(
                 "(p.project_name LIKE @search OR p.description LIKE @search)"
             );
+
+            parameters.push({
+                name: "search",
+                type: sql.NVarChar(500),
+                value: `%${search}%`
+            });
         }
 
-        // Filter by project status.
-        if (status) {
-            request.input("status", sql.NVarChar(30), status);
+        if (status && typeof status === "string") {
             conditions.push("p.status = @status");
+
+            parameters.push({
+                name: "status",
+                type: sql.NVarChar(50),
+                value: status
+            });
         }
 
-        // Filter by category.
         if (category_id !== undefined) {
             if (!isPositiveInteger(category_id)) {
                 return res.status(400).json({
                     success: false,
-                    error: "Category ID must be a positive integer."
+                    error: "Invalid category ID."
                 });
             }
 
-            request.input("category_id", sql.Int, Number(category_id));
             conditions.push("p.category_id = @category_id");
+
+            parameters.push({
+                name: "category_id",
+                type: sql.Int,
+                value: Number(category_id)
+            });
         }
 
         const whereClause = conditions.length
             ? "WHERE " + conditions.join(" AND ")
             : "";
 
-        // Only allow predefined sort options.
+        // Only allow predefined sorting options
         const sortOptions = {
             newest: "p.created_at DESC",
             oldest: "p.created_at ASC",
@@ -89,29 +109,32 @@ router.get("/", async (req, res) => {
             goal: "p.goal_hours DESC"
         };
 
-        if (!sortOptions[sort]) {
-            return res.status(400).json({
-                success: false,
-                error: "Invalid sort option. Use newest, oldest, name, or goal."
-            });
-        }
+        const orderBy = sortOptions[sort] || sortOptions.newest;
 
-        const offset = (pageNumber - 1) * pageLimit;
+        const request = pool.request();
+
+        parameters.forEach(parameter => {
+            request.input(
+                parameter.name,
+                parameter.type,
+                parameter.value
+            );
+        });
 
         request.input("offset", sql.Int, offset);
-        request.input("limit", sql.Int, pageLimit);
+        request.input("pageSize", sql.Int, pageSize);
 
-        // Retrieve matching projects.
         const result = await request.query(`
             SELECT
                 p.project_id,
+                p.owner_id,
+                p.category_id,
                 p.project_name,
                 p.description,
                 p.goal_hours,
                 p.status,
                 p.created_at,
-                p.owner_id,
-                p.category_id,
+                p.updated_at,
                 u.username,
                 c.category_name
             FROM dbo.projects AS p
@@ -120,33 +143,20 @@ router.get("/", async (req, res) => {
             LEFT JOIN dbo.project_categories AS c
                 ON p.category_id = c.category_id
             ${whereClause}
-            ORDER BY ${sortOptions[sort]}
+            ORDER BY ${orderBy}
             OFFSET @offset ROWS
-            FETCH NEXT @limit ROWS ONLY;
+            FETCH NEXT @pageSize ROWS ONLY;
         `);
 
-        // Count all matching projects for pagination.
         const countRequest = pool.request();
 
-        if (search) {
+        parameters.forEach(parameter => {
             countRequest.input(
-                "search",
-                sql.NVarChar(255),
-                `%${String(search).trim()}%`
+                parameter.name,
+                parameter.type,
+                parameter.value
             );
-        }
-
-        if (status) {
-            countRequest.input("status", sql.NVarChar(30), status);
-        }
-
-        if (category_id !== undefined) {
-            countRequest.input(
-                "category_id",
-                sql.Int,
-                Number(category_id)
-            );
-        }
+        });
 
         const countResult = await countRequest.query(`
             SELECT COUNT(*) AS total
@@ -154,14 +164,15 @@ router.get("/", async (req, res) => {
             ${whereClause};
         `);
 
-        const total = Number(countResult.recordset[0].total);
+        const total = countResult.recordset[0].total;
 
         res.json({
             success: true,
             count: result.recordset.length,
-            total: total,
+            total,
             page: pageNumber,
-            totalPages: Math.ceil(total / pageLimit),
+            limit: pageSize,
+            totalPages: Math.ceil(total / pageSize),
             projects: result.recordset
         });
 
@@ -177,12 +188,12 @@ router.get("/", async (req, res) => {
 
 
 // GET /api/projects/:id
-// Retrieve one project by its ID.
+// Retrieve one project
 router.get("/:id", async (req, res) => {
     try {
-        const projectId = Number(req.params.id);
+        const { id } = req.params;
 
-        if (!isPositiveInteger(projectId)) {
+        if (!isPositiveInteger(id)) {
             return res.status(400).json({
                 success: false,
                 error: "Invalid project ID."
@@ -192,17 +203,18 @@ router.get("/:id", async (req, res) => {
         const pool = await getDatabase(req);
 
         const result = await pool.request()
-            .input("project_id", sql.Int, projectId)
+            .input("project_id", sql.Int, Number(id))
             .query(`
                 SELECT
                     p.project_id,
+                    p.owner_id,
+                    p.category_id,
                     p.project_name,
                     p.description,
                     p.goal_hours,
                     p.status,
                     p.created_at,
-                    p.owner_id,
-                    p.category_id,
+                    p.updated_at,
                     u.username,
                     c.category_name
                 FROM dbo.projects AS p
@@ -237,7 +249,7 @@ router.get("/:id", async (req, res) => {
 
 
 // POST /api/projects
-// Create a new project.
+// Create a new project
 router.post("/", async (req, res) => {
     try {
         const {
@@ -251,70 +263,77 @@ router.post("/", async (req, res) => {
         if (
             typeof project_name !== "string" ||
             !project_name.trim() ||
-            project_name.trim().length > 255 ||
-            typeof (description ?? "") !== "string" ||
-            !isPositiveInteger(goal_hours) ||
-            !isPositiveInteger(owner_id)
+            project_name.trim().length > 255
         ) {
             return res.status(400).json({
                 success: false,
-                error: "Provide a project name (up to 255 characters), description, positive goal hours, and valid owner ID."
+                error: "A project name is required (maximum 255 characters)."
             });
         }
 
-        const categoryId =
-            category_id === undefined ||
-            category_id === null ||
-            category_id === ""
-                ? null
-                : Number(category_id);
-
-        if (
-            categoryId !== null &&
-            !isPositiveInteger(categoryId)
-        ) {
+        if (typeof description !== "string") {
             return res.status(400).json({
                 success: false,
-                error: "Category ID must be a positive integer."
+                error: "A project description is required."
             });
+        }
+
+        if (!isPositiveNumber(goal_hours)) {
+            return res.status(400).json({
+                success: false,
+                error: "Goal hours must be a positive number."
+            });
+        }
+
+        if (!isPositiveInteger(owner_id)) {
+            return res.status(400).json({
+                success: false,
+                error: "A valid owner ID is required."
+            });
+        }
+
+        let categoryId = null;
+
+        if (
+            category_id !== undefined &&
+            category_id !== null &&
+            category_id !== ""
+        ) {
+            if (!isPositiveInteger(category_id)) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Invalid category ID."
+                });
+            }
+
+            categoryId = Number(category_id);
         }
 
         const pool = await getDatabase(req);
-        const request = pool.request();
 
-        request.input(
-            "project_name",
-            sql.NVarChar(255),
-            project_name.trim()
-        );
-
-        request.input(
-            "description",
-            sql.NVarChar(sql.MAX),
-            description ?? ""
-        );
-
-        request.input(
-            "goal_hours",
-            sql.Int,
-            Number(goal_hours)
-        );
-
-        request.input(
-            "owner_id",
-            sql.Int,
-            Number(owner_id)
-        );
-
-        request.input("category_id", sql.Int, categoryId);
-
-        const result = await request.query(`
-            INSERT INTO dbo.projects
-                (project_name, description, goal_hours, owner_id, category_id, status)
-            OUTPUT INSERTED.*
-            VALUES
-                (@project_name, @description, @goal_hours, @owner_id, @category_id, 'active');
-        `);
+        const result = await pool.request()
+            .input("project_name", sql.NVarChar(255), project_name.trim())
+            .input("description", sql.NVarChar(sql.MAX), description)
+            .input("goal_hours", sql.Decimal(10, 2), Number(goal_hours))
+            .input("owner_id", sql.Int, Number(owner_id))
+            .input("category_id", sql.Int, categoryId)
+            .query(`
+                INSERT INTO dbo.projects (
+                    owner_id,
+                    category_id,
+                    project_name,
+                    description,
+                    goal_hours
+                )
+                OUTPUT INSERTED.*
+                VALUES (
+                    @owner_id,
+                    @category_id,
+                    @project_name,
+                    @description,
+                    @goal_hours
+                );
+            `);
 
         res.status(201).json({
             success: true,
@@ -334,10 +353,10 @@ router.post("/", async (req, res) => {
 
 
 // PUT /api/projects/:id
-// Edit an existing project.
+// Edit an existing project
 router.put("/:id", async (req, res) => {
     try {
-        const projectId = Number(req.params.id);
+        const { id } = req.params;
 
         const {
             project_name,
@@ -347,64 +366,69 @@ router.put("/:id", async (req, res) => {
             category_id
         } = req.body;
 
+        if (!isPositiveInteger(id) || !isPositiveInteger(owner_id)) {
+            return res.status(400).json({
+                success: false,
+                error: "A valid project ID and owner ID are required."
+            });
+        }
+
         if (
-            !isPositiveInteger(projectId) ||
             typeof project_name !== "string" ||
             !project_name.trim() ||
             project_name.trim().length > 255 ||
-            typeof (description ?? "") !== "string" ||
-            !isPositiveInteger(goal_hours) ||
-            !isPositiveInteger(owner_id)
+            typeof description !== "string" ||
+            !isPositiveNumber(goal_hours)
         ) {
             return res.status(400).json({
                 success: false,
-                error: "Invalid project ID or project information."
+                error: "Valid project name, description, and positive goal hours are required."
             });
         }
 
-        const categoryId =
-            category_id === undefined ||
-            category_id === null ||
-            category_id === ""
-                ? null
-                : Number(category_id);
+        let categoryId = null;
 
         if (
-            categoryId !== null &&
-            !isPositiveInteger(categoryId)
+            category_id !== undefined &&
+            category_id !== null &&
+            category_id !== ""
         ) {
-            return res.status(400).json({
-                success: false,
-                error: "Category ID must be a positive integer."
-            });
+            if (!isPositiveInteger(category_id)) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Invalid category ID."
+                });
+            }
+
+            categoryId = Number(category_id);
         }
 
         const pool = await getDatabase(req);
-        const request = pool.request();
 
-        request.input("project_id", sql.Int, projectId);
-        request.input("project_name", sql.NVarChar(255), project_name.trim());
-        request.input("description", sql.NVarChar(sql.MAX), description ?? "");
-        request.input("goal_hours", sql.Int, Number(goal_hours));
-        request.input("owner_id", sql.Int, Number(owner_id));
-        request.input("category_id", sql.Int, categoryId);
-
-        const result = await request.query(`
-            UPDATE dbo.projects
-            SET
-                project_name = @project_name,
-                description = @description,
-                goal_hours = @goal_hours,
-                category_id = @category_id
-            OUTPUT INSERTED.*
-            WHERE project_id = @project_id
-              AND owner_id = @owner_id;
-        `);
+        const result = await pool.request()
+            .input("project_id", sql.Int, Number(id))
+            .input("owner_id", sql.Int, Number(owner_id))
+            .input("project_name", sql.NVarChar(255), project_name.trim())
+            .input("description", sql.NVarChar(sql.MAX), description)
+            .input("goal_hours", sql.Decimal(10, 2), Number(goal_hours))
+            .input("category_id", sql.Int, categoryId)
+            .query(`
+                UPDATE dbo.projects
+                SET
+                    project_name = @project_name,
+                    description = @description,
+                    goal_hours = @goal_hours,
+                    category_id = @category_id,
+                    updated_at = SYSUTCDATETIME()
+                OUTPUT INSERTED.*
+                WHERE project_id = @project_id
+                  AND owner_id = @owner_id;
+            `);
 
         if (result.recordset.length === 0) {
             return res.status(404).json({
                 success: false,
-                error: "Project not found or does not belong to this owner."
+                error: "Project not found or owner ID does not match."
             });
         }
 
@@ -426,30 +450,29 @@ router.put("/:id", async (req, res) => {
 
 
 // PATCH /api/projects/:id/cancel
-// Cancel a project without deleting its database record.
+// Cancel a project without deleting it
 router.patch("/:id/cancel", async (req, res) => {
     try {
-        const projectId = Number(req.params.id);
-        const ownerId = Number(req.body.owner_id);
+        const { id } = req.params;
+        const { owner_id } = req.body;
 
-        if (
-            !isPositiveInteger(projectId) ||
-            !isPositiveInteger(ownerId)
-        ) {
+        if (!isPositiveInteger(id) || !isPositiveInteger(owner_id)) {
             return res.status(400).json({
                 success: false,
-                error: "Valid project ID and owner ID are required."
+                error: "A valid project ID and owner ID are required."
             });
         }
 
         const pool = await getDatabase(req);
 
         const result = await pool.request()
-            .input("project_id", sql.Int, projectId)
-            .input("owner_id", sql.Int, ownerId)
+            .input("project_id", sql.Int, Number(id))
+            .input("owner_id", sql.Int, Number(owner_id))
             .query(`
                 UPDATE dbo.projects
-                SET status = 'cancelled'
+                SET
+                    status = 'cancelled',
+                    updated_at = SYSUTCDATETIME()
                 OUTPUT INSERTED.*
                 WHERE project_id = @project_id
                   AND owner_id = @owner_id;
@@ -458,7 +481,7 @@ router.patch("/:id/cancel", async (req, res) => {
         if (result.recordset.length === 0) {
             return res.status(404).json({
                 success: false,
-                error: "Project not found or does not belong to this owner."
+                error: "Project not found or owner ID does not match."
             });
         }
 
