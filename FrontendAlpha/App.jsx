@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
+import API_BASE_URL from './api';
 
 // Starter projects for the demo; changes are kept in memory until refresh.
 const samples = [
@@ -74,7 +75,7 @@ export default function App() {
     setBackendMessage('');
 
     try {
-      const response = await fetch('/api/hello');
+      const response = await fetch(`${API_BASE_URL}/api/hello`);
 
       if (!response.ok) {
         throw new Error('Request failed');
@@ -93,7 +94,7 @@ export default function App() {
     useEffect(() => {
     const controller = new AbortController();
     
-    fetch('/api/hello', { signal: controller.signal })
+    fetch(`${API_BASE_URL}/api/hello`, {signal: controller.signal})
       .then(response => {
         if (!response.ok) throw new Error('Connection failed');
         return response.json();
