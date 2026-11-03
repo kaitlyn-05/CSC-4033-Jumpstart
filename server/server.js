@@ -8,7 +8,7 @@ const sql = require("mssql");
 const helloRoutes = require("./routes/hello");
 const projectRoutes = require("./routes/projects");
 const commentRoutes = require("./routes/comments");
-const contributorRoutes = require("./routes/contributors");
+const contributorRoutes = require("./routes/contributionss");
 const userRoutes = require("./routes/users");
 
 const app = express();
