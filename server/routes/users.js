@@ -6,30 +6,39 @@ const jwt = require("jsonwebtoken");
 
 const router = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET;
-
-// Get database connection
+// Database connection
 async function getDatabase(req) {
     return await req.app.locals.getPool();
 }
 
-// Validate positive integer IDs
-function isPositiveInteger(value) {
-    return (
-        value !== undefined &&
-        value !== null &&
-        Number.isInteger(Number(value)) &&
-        Number(value) > 0
-    );
+// Validate user ID
+function isValidId(id) {
+    return Number.isInteger(Number(id)) && Number(id) > 0;
 }
 
-// Validate email addresses
+// Validate email
 function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-// Remove sensitive information from user records
-function publicUser(user) {
+// Generate authentication token
+function generateToken(user) {
+    if (!process.env.JWT_SECRET) {
+        throw new Error("JWT_SECRET is not configured.");
+    }
+
+    return jwt.sign(
+        {
+            user_id: user.user_id,
+            username: user.username
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "1d" }
+    );
+}
+
+// Remove password hash from returned user data
+function formatUser(user) {
     return {
         user_id: user.user_id,
         username: user.username,
@@ -39,24 +48,12 @@ function publicUser(user) {
     };
 }
 
-// Create a JWT token
-function createToken(user) {
-    if (!JWT_SECRET) {
-        throw new Error("JWT_SECRET is not configured.");
-    }
 
-    return jwt.sign(
-        {
-            user_id: user.user_id,
-            username: user.username
-        },
-        JWT_SECRET,
-        { expiresIn: "1d" }
-    );
-}
-
+// ==========================================
 // POST /api/users/register
-// Register a new user
+// Register a new account
+// ==========================================
+
 router.post("/register", async (req, res) => {
     try {
         const { username, email, password } = req.body;
@@ -75,23 +72,17 @@ router.post("/register", async (req, res) => {
         const cleanUsername = username.trim();
         const cleanEmail = email.trim().toLowerCase();
 
-        if (
-            cleanUsername.length < 3 ||
-            cleanUsername.length > 50
-        ) {
+        if (cleanUsername.length < 3 || cleanUsername.length > 50) {
             return res.status(400).json({
                 success: false,
                 error: "Username must be between 3 and 50 characters."
             });
         }
 
-        if (
-            cleanEmail.length > 254 ||
-            !isValidEmail(cleanEmail)
-        ) {
+        if (!isValidEmail(cleanEmail) || cleanEmail.length > 254) {
             return res.status(400).json({
                 success: false,
-                error: "Please provide a valid email address."
+                error: "Please enter a valid email address."
             });
         }
 
@@ -122,13 +113,14 @@ router.post("/register", async (req, res) => {
             });
         }
 
-        // Hash password before storing it
+        // Hash password
         const passwordHash = await bcrypt.hash(password, 12);
 
+        // Insert user into database
         const result = await pool.request()
             .input("username", sql.NVarChar(50), cleanUsername)
             .input("email", sql.NVarChar(254), cleanEmail)
-            .input("password_hash", sql.NVarChar(sql.MAX), passwordHash)
+            .input("password_hash", sql.NVarChar(255), passwordHash)
             .query(`
                 INSERT INTO dbo.users (
                     username,
@@ -150,13 +142,11 @@ router.post("/register", async (req, res) => {
 
         const user = result.recordset[0];
 
-        const token = createToken(user);
-
         res.status(201).json({
             success: true,
             message: "Account created successfully.",
-            user,
-            token
+            user: formatUser(user),
+            token: generateToken(user)
         });
 
     } catch (error) {
@@ -164,14 +154,17 @@ router.post("/register", async (req, res) => {
 
         res.status(500).json({
             success: false,
-            error: "Unable to register user."
+            error: "Unable to register account."
         });
     }
 });
 
 
+// ==========================================
 // POST /api/users/login
-// Authenticate an existing user
+// Log into an existing account
+// ==========================================
+
 router.post("/login", async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -191,19 +184,9 @@ router.post("/login", async (req, res) => {
         const pool = await getDatabase(req);
 
         const result = await pool.request()
-            .input(
-                "email",
-                sql.NVarChar(254),
-                email.trim().toLowerCase()
-            )
+            .input("email", sql.NVarChar(254), email.trim().toLowerCase())
             .query(`
-                SELECT
-                    user_id,
-                    username,
-                    email,
-                    password_hash,
-                    created_at,
-                    status
+                SELECT *
                 FROM dbo.users
                 WHERE email = @email;
             `);
@@ -217,7 +200,7 @@ router.post("/login", async (req, res) => {
 
         const user = result.recordset[0];
 
-        // Check password
+        // Verify password
         const passwordMatches = await bcrypt.compare(
             password,
             user.password_hash
@@ -230,21 +213,19 @@ router.post("/login", async (req, res) => {
             });
         }
 
-        // Prevent suspended or deleted accounts from logging in
+        // Check account status
         if (user.status !== "active") {
             return res.status(403).json({
                 success: false,
-                error: `This account is ${user.status}.`
+                error: `Account is ${user.status}.`
             });
         }
-
-        const token = createToken(user);
 
         res.json({
             success: true,
             message: "Login successful.",
-            user: publicUser(user),
-            token
+            user: formatUser(user),
+            token: generateToken(user)
         });
 
     } catch (error) {
@@ -258,13 +239,16 @@ router.post("/login", async (req, res) => {
 });
 
 
+// ==========================================
 // GET /api/users/:id
-// Retrieve a user's public information
+// Retrieve a user
+// ==========================================
+
 router.get("/:id", async (req, res) => {
     try {
         const { id } = req.params;
 
-        if (!isPositiveInteger(id)) {
+        if (!isValidId(id)) {
             return res.status(400).json({
                 success: false,
                 error: "Invalid user ID."
@@ -295,7 +279,7 @@ router.get("/:id", async (req, res) => {
 
         res.json({
             success: true,
-            user: result.recordset[0]
+            user: formatUser(result.recordset[0])
         });
 
     } catch (error) {
@@ -309,14 +293,17 @@ router.get("/:id", async (req, res) => {
 });
 
 
+// ==========================================
 // PUT /api/users/:id
-// Update a user's username or email
+// Update username and email
+// ==========================================
+
 router.put("/:id", async (req, res) => {
     try {
         const { id } = req.params;
         const { username, email } = req.body;
 
-        if (!isPositiveInteger(id)) {
+        if (!isValidId(id)) {
             return res.status(400).json({
                 success: false,
                 error: "Invalid user ID."
@@ -339,23 +326,20 @@ router.put("/:id", async (req, res) => {
         if (cleanUsername.length < 3 || cleanUsername.length > 50) {
             return res.status(400).json({
                 success: false,
-                error: "Username must be between 3 and 50 characters."
+                error: "Invalid username length."
             });
         }
 
-        if (
-            cleanEmail.length > 254 ||
-            !isValidEmail(cleanEmail)
-        ) {
+        if (!isValidEmail(cleanEmail) || cleanEmail.length > 254) {
             return res.status(400).json({
                 success: false,
-                error: "Please provide a valid email address."
+                error: "Invalid email address."
             });
         }
 
         const pool = await getDatabase(req);
 
-        // Check whether another account uses the username or email
+        // Check for duplicate usernames or emails
         const existingUser = await pool.request()
             .input("user_id", sql.Int, Number(id))
             .input("username", sql.NVarChar(50), cleanUsername)
@@ -402,7 +386,7 @@ router.put("/:id", async (req, res) => {
         res.json({
             success: true,
             message: "Account updated successfully.",
-            user: result.recordset[0]
+            user: formatUser(result.recordset[0])
         });
 
     } catch (error) {
@@ -412,6 +396,11 @@ router.put("/:id", async (req, res) => {
             success: false,
             error: "Unable to update account."
         });
+    }
+});
+
+module.exports = router;
+
     }
 });
 
