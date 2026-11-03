@@ -1,4 +1,3 @@
-
 const express = require("express");
 const cors = require("cors");
 
@@ -12,19 +11,26 @@ app.get("/", (req, res) => {
     res.send("Jumpstart backend is running!");
 });
 
-app.get("/api/hello", (req, res) => {
-    res.json({
-        success: true,
-        message: "Hello from Jumpstart!"
-    });
+app.get("/api/health", (req, res) => {
+    res.json({ success: true, message: "API is healthy!" });
 });
 
-app.get("/api/health", (req, res) => {
-    res.json({
-        success: true,
-        message: "Jumpstart API is running!"
-    });
-});
+function loadRoute(name, path, routePath) {
+    try {
+        const router = require(path);
+        app.use(routePath, router);
+        console.log(`SUCCESS: Loaded ${name}`);
+    } catch (error) {
+        console.error(`FAILED: Loading ${name}`);
+        console.error(error.stack);
+    }
+}
+
+loadRoute("hello", "./routes/hello", "/api/hello");
+loadRoute("projects", "./routes/projects", "/api/projects");
+loadRoute("comments", "./routes/comments", "/api/comments");
+loadRoute("contributors", "./routes/contributors", "/api/contributors");
+loadRoute("users", "./routes/users", "/api/users");
 
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Jumpstart server running on port ${PORT}`);
