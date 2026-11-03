@@ -1,8 +1,44 @@
+
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
+const sql = require("mssql");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+const dbConfig = {
+    server: process.env.AZURE_SQL_SERVER,
+    port: Number(process.env.AZURE_SQL_PORT || 1433),
+    database: process.env.AZURE_SQL_DATABASE,
+    authentication: {
+        type: "azure-active-directory-default"
+    },
+    options: {
+        encrypt: true,
+        trustServerCertificate: false
+    }
+};
+
+let poolPromise;
+
+function getPool() {
+    if (!poolPromise) {
+        poolPromise = new sql.ConnectionPool(dbConfig)
+            .connect()
+            .catch((error) => {
+                poolPromise = null;
+                console.error("Database connection failed:", error);
+                throw error;
+            });
+    }
+
+    return poolPromise;
+}
+
+// Make the database connection available to all routes.
+app.locals.getPool = getPool;
 
 app.use(cors());
 app.use(express.json());
@@ -12,7 +48,10 @@ app.get("/", (req, res) => {
 });
 
 app.get("/api/health", (req, res) => {
-    res.json({ success: true, message: "API is healthy!" });
+    res.json({
+        success: true,
+        message: "Jumpstart API is running."
+    });
 });
 
 function loadRoute(name, path, routePath) {
@@ -21,8 +60,7 @@ function loadRoute(name, path, routePath) {
         app.use(routePath, router);
         console.log(`SUCCESS: Loaded ${name}`);
     } catch (error) {
-        console.error(`FAILED: Loading ${name}`);
-        console.error(error.stack);
+        console.error(`FAILED: Loading ${name}`, error);
     }
 }
 
