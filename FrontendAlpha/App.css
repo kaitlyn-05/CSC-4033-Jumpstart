@@ -105,3 +105,26 @@ h2 { font-size: 19px; font-weight: 400; margin: 0 0 18px; }
 
 /* Keep the Post button from shrinking or wrapping beside the comment input. */
 .comments .gray-button { flex-shrink: 0; white-space: nowrap; padding: 9px 12px; }
+
+/* Added project feature controls; existing styles retained. */
+.test-identity { display: grid; gap: .5rem; margin: 1rem 0; }
+.test-identity input { max-width: 15rem; padding: .6rem; }
+.pagination { display: flex; align-items: center; gap: 1rem; margin: 1.5rem 0; }
+button:disabled { opacity: .55; cursor: wait; }
+
+/* Keep refresh close under Search Projects on both list screens. */
+.content .search-bar { margin-bottom: 2px; }
+.refresh-projects-row { max-width: 740px; margin: 0 auto 24px; }
+.refresh-projects-row .text-button { padding: 5px 0; }
+.my-projects { margin-top: 0; }
+/* Home pagination sits just above the fixed Create/navigation bar. */
+.home-content { padding-bottom: 105px; }
+.home-pagination { position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%); z-index: 2;
+  display: flex; justify-content: center; align-items: center; gap: 16px; width: max-content;
+  max-width: calc(100vw - 24px); margin: 0; padding: 8px 12px; background: #fff; border: 1px solid #aaa; }
+.home-pagination span { white-space: nowrap; font-size: 14px; }
+@media (max-width: 600px) {
+  .home-pagination { bottom: 110px; gap: 8px; padding: 6px 8px; }
+  .home-pagination .gray-button { padding: 8px 12px; }
+}
+
