@@ -4,22 +4,47 @@ const sql = require("mssql");
 
 const router = express.Router();
 
-// Helper: Validate positive integer IDs.
+// Validate positive integer IDs.
 function isPositiveInteger(value) {
     return Number.isInteger(Number(value)) && Number(value) > 0;
 }
 
-// Helper: Get the database connection.
+// Validate positive hour amounts.
+function isPositiveHours(value) {
+    return (
+        value !== undefined &&
+        value !== null &&
+        value !== "" &&
+        Number.isFinite(Number(value)) &&
+        Number(value) > 0
+    );
+}
+
+// Get the database connection.
 async function getDatabase(req) {
+    if (!req.app.locals.getPool) {
+        throw new Error("Database connection function is not configured.");
+    }
+
     return await req.app.locals.getPool();
 }
 
+// Format errors consistently.
+function handleError(res, error, operation) {
+    console.error(`${operation} failed:`, error);
+
+    res.status(500).json({
+        success: false,
+        error: `${operation} failed.`,
+        details: error.message
+    });
+}
+
 // GET /api/projects
-// Retrieve projects with optional search, filters, sorting, and pagination.
+// Retrieve projects with search, filters, sorting, and pagination.
 router.get("/", async (req, res) => {
     try {
         const pool = await getDatabase(req);
-        const request = pool.request();
 
         const {
             search,
@@ -34,18 +59,22 @@ router.get("/", async (req, res) => {
         const pageLimit = Number(limit);
 
         if (
-            !Number.isInteger(pageNumber) || pageNumber < 1 ||
-            !Number.isInteger(pageLimit) || pageLimit < 1 || pageLimit > 100
+            !Number.isInteger(pageNumber) ||
+            pageNumber < 1 ||
+            !Number.isInteger(pageLimit) ||
+            pageLimit < 1 ||
+            pageLimit > 100
         ) {
             return res.status(400).json({
                 success: false,
-                error: "Page must be positive and limit must be between 1 and 100."
+                error: "Invalid page or limit."
             });
         }
 
-        let conditions = [];
+        const conditions = [];
 
-        // Search project name and description.
+        const request = pool.request();
+
         if (search) {
             request.input(
                 "search",
@@ -58,22 +87,25 @@ router.get("/", async (req, res) => {
             );
         }
 
-        // Filter by project status.
         if (status) {
             request.input("status", sql.NVarChar(30), status);
             conditions.push("p.status = @status");
         }
 
-        // Filter by category.
         if (category_id !== undefined) {
             if (!isPositiveInteger(category_id)) {
                 return res.status(400).json({
                     success: false,
-                    error: "Category ID must be a positive integer."
+                    error: "Invalid category ID."
                 });
             }
 
-            request.input("category_id", sql.Int, Number(category_id));
+            request.input(
+                "category_id",
+                sql.Int,
+                Number(category_id)
+            );
+
             conditions.push("p.category_id = @category_id");
         }
 
@@ -81,7 +113,6 @@ router.get("/", async (req, res) => {
             ? "WHERE " + conditions.join(" AND ")
             : "";
 
-        // Only allow predefined sort options.
         const sortOptions = {
             newest: "p.created_at DESC",
             oldest: "p.created_at ASC",
@@ -92,7 +123,7 @@ router.get("/", async (req, res) => {
         if (!sortOptions[sort]) {
             return res.status(400).json({
                 success: false,
-                error: "Invalid sort option. Use newest, oldest, name, or goal."
+                error: "Invalid sort option."
             });
         }
 
@@ -101,7 +132,6 @@ router.get("/", async (req, res) => {
         request.input("offset", sql.Int, offset);
         request.input("limit", sql.Int, pageLimit);
 
-        // Retrieve matching projects.
         const result = await request.query(`
             SELECT
                 p.project_id,
@@ -110,6 +140,7 @@ router.get("/", async (req, res) => {
                 p.goal_hours,
                 p.status,
                 p.created_at,
+                p.updated_at,
                 p.owner_id,
                 p.category_id,
                 u.username,
@@ -125,7 +156,6 @@ router.get("/", async (req, res) => {
             FETCH NEXT @limit ROWS ONLY;
         `);
 
-        // Count all matching projects for pagination.
         const countRequest = pool.request();
 
         if (search) {
@@ -151,6 +181,10 @@ router.get("/", async (req, res) => {
         const countResult = await countRequest.query(`
             SELECT COUNT(*) AS total
             FROM dbo.projects AS p
+            INNER JOIN dbo.users AS u
+                ON p.owner_id = u.user_id
+            LEFT JOIN dbo.project_categories AS c
+                ON p.category_id = c.category_id
             ${whereClause};
         `);
 
@@ -159,25 +193,19 @@ router.get("/", async (req, res) => {
         res.json({
             success: true,
             count: result.recordset.length,
-            total: total,
+            total,
             page: pageNumber,
             totalPages: Math.ceil(total / pageLimit),
             projects: result.recordset
         });
 
     } catch (error) {
-        console.error("Failed to retrieve projects:", error);
-
-        res.status(500).json({
-            success: false,
-            error: "Failed to retrieve projects."
-        });
+        handleError(res, error, "Retrieve projects");
     }
 });
 
-
 // GET /api/projects/:id
-// Retrieve one project by its ID.
+// Retrieve an individual project.
 router.get("/:id", async (req, res) => {
     try {
         const projectId = Number(req.params.id);
@@ -201,6 +229,7 @@ router.get("/:id", async (req, res) => {
                     p.goal_hours,
                     p.status,
                     p.created_at,
+                    p.updated_at,
                     p.owner_id,
                     p.category_id,
                     u.username,
@@ -226,18 +255,12 @@ router.get("/:id", async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Failed to retrieve project:", error);
-
-        res.status(500).json({
-            success: false,
-            error: "Failed to retrieve project."
-        });
+        handleError(res, error, "Retrieve project");
     }
 });
 
-
 // POST /api/projects
-// Create a new project.
+// Create a project.
 router.post("/", async (req, res) => {
     try {
         const {
@@ -253,12 +276,12 @@ router.post("/", async (req, res) => {
             !project_name.trim() ||
             project_name.trim().length > 255 ||
             typeof (description ?? "") !== "string" ||
-            !isPositiveInteger(goal_hours) ||
+            !isPositiveHours(goal_hours) ||
             !isPositiveInteger(owner_id)
         ) {
             return res.status(400).json({
                 success: false,
-                error: "Provide a project name (up to 255 characters), description, positive goal hours, and valid owner ID."
+                error: "Provide a project name, description, positive goal hours, and valid owner ID."
             });
         }
 
@@ -275,46 +298,51 @@ router.post("/", async (req, res) => {
         ) {
             return res.status(400).json({
                 success: false,
-                error: "Category ID must be a positive integer."
+                error: "Invalid category ID."
             });
         }
 
         const pool = await getDatabase(req);
-        const request = pool.request();
 
-        request.input(
-            "project_name",
-            sql.NVarChar(255),
-            project_name.trim()
-        );
-
-        request.input(
-            "description",
-            sql.NVarChar(sql.MAX),
-            description ?? ""
-        );
-
-        request.input(
-            "goal_hours",
-            sql.Int,
-            Number(goal_hours)
-        );
-
-        request.input(
-            "owner_id",
-            sql.Int,
-            Number(owner_id)
-        );
-
-        request.input("category_id", sql.Int, categoryId);
-
-        const result = await request.query(`
-            INSERT INTO dbo.projects
-                (project_name, description, goal_hours, owner_id, category_id, status)
-            OUTPUT INSERTED.*
-            VALUES
-                (@project_name, @description, @goal_hours, @owner_id, @category_id, 'active');
-        `);
+        const result = await pool.request()
+            .input(
+                "project_name",
+                sql.NVarChar(255),
+                project_name.trim()
+            )
+            .input(
+                "description",
+                sql.NVarChar(sql.MAX),
+                description ?? ""
+            )
+            .input(
+                "goal_hours",
+                sql.Decimal(7, 2),
+                Number(goal_hours)
+            )
+            .input("owner_id", sql.Int, Number(owner_id))
+            .input("category_id", sql.Int, categoryId)
+            .query(`
+                INSERT INTO dbo.projects
+                    (
+                        project_name,
+                        description,
+                        goal_hours,
+                        owner_id,
+                        category_id,
+                        status
+                    )
+                OUTPUT INSERTED.*
+                VALUES
+                    (
+                        @project_name,
+                        @description,
+                        @goal_hours,
+                        @owner_id,
+                        @category_id,
+                        'open'
+                    );
+            `);
 
         res.status(201).json({
             success: true,
@@ -323,18 +351,12 @@ router.post("/", async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Failed to create project:", error);
-
-        res.status(500).json({
-            success: false,
-            error: "Failed to create project."
-        });
+        handleError(res, error, "Create project");
     }
 });
 
-
 // PUT /api/projects/:id
-// Edit an existing project.
+// Update a project.
 router.put("/:id", async (req, res) => {
     try {
         const projectId = Number(req.params.id);
@@ -349,16 +371,16 @@ router.put("/:id", async (req, res) => {
 
         if (
             !isPositiveInteger(projectId) ||
+            !isPositiveInteger(owner_id) ||
             typeof project_name !== "string" ||
             !project_name.trim() ||
             project_name.trim().length > 255 ||
             typeof (description ?? "") !== "string" ||
-            !isPositiveInteger(goal_hours) ||
-            !isPositiveInteger(owner_id)
+            !isPositiveHours(goal_hours)
         ) {
             return res.status(400).json({
                 success: false,
-                error: "Invalid project ID or project information."
+                error: "Invalid project information."
             });
         }
 
@@ -375,31 +397,31 @@ router.put("/:id", async (req, res) => {
         ) {
             return res.status(400).json({
                 success: false,
-                error: "Category ID must be a positive integer."
+                error: "Invalid category ID."
             });
         }
 
         const pool = await getDatabase(req);
-        const request = pool.request();
 
-        request.input("project_id", sql.Int, projectId);
-        request.input("project_name", sql.NVarChar(255), project_name.trim());
-        request.input("description", sql.NVarChar(sql.MAX), description ?? "");
-        request.input("goal_hours", sql.Int, Number(goal_hours));
-        request.input("owner_id", sql.Int, Number(owner_id));
-        request.input("category_id", sql.Int, categoryId);
-
-        const result = await request.query(`
-            UPDATE dbo.projects
-            SET
-                project_name = @project_name,
-                description = @description,
-                goal_hours = @goal_hours,
-                category_id = @category_id
-            OUTPUT INSERTED.*
-            WHERE project_id = @project_id
-              AND owner_id = @owner_id;
-        `);
+        const result = await pool.request()
+            .input("project_id", sql.Int, projectId)
+            .input("project_name", sql.NVarChar(255), project_name.trim())
+            .input("description", sql.NVarChar(sql.MAX), description ?? "")
+            .input("goal_hours", sql.Decimal(7, 2), Number(goal_hours))
+            .input("owner_id", sql.Int, Number(owner_id))
+            .input("category_id", sql.Int, categoryId)
+            .query(`
+                UPDATE dbo.projects
+                SET
+                    project_name = @project_name,
+                    description = @description,
+                    goal_hours = @goal_hours,
+                    category_id = @category_id,
+                    updated_at = SYSUTCDATETIME()
+                OUTPUT INSERTED.*
+                WHERE project_id = @project_id
+                  AND owner_id = @owner_id;
+            `);
 
         if (result.recordset.length === 0) {
             return res.status(404).json({
@@ -415,18 +437,12 @@ router.put("/:id", async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Failed to update project:", error);
-
-        res.status(500).json({
-            success: false,
-            error: "Failed to update project."
-        });
+        handleError(res, error, "Update project");
     }
 });
 
-
 // PATCH /api/projects/:id/cancel
-// Cancel a project without deleting its database record.
+// Cancel a project.
 router.patch("/:id/cancel", async (req, res) => {
     try {
         const projectId = Number(req.params.id);
@@ -449,7 +465,9 @@ router.patch("/:id/cancel", async (req, res) => {
             .input("owner_id", sql.Int, ownerId)
             .query(`
                 UPDATE dbo.projects
-                SET status = 'cancelled'
+                SET
+                    status = 'cancelled',
+                    updated_at = SYSUTCDATETIME()
                 OUTPUT INSERTED.*
                 WHERE project_id = @project_id
                   AND owner_id = @owner_id;
@@ -469,12 +487,7 @@ router.patch("/:id/cancel", async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Failed to cancel project:", error);
-
-        res.status(500).json({
-            success: false,
-            error: "Failed to cancel project."
-        });
+        handleError(res, error, "Cancel project");
     }
 });
 
