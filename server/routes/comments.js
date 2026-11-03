@@ -12,6 +12,45 @@ function isValidId(id) {
     return Number.isInteger(Number(id)) && Number(id) > 0;
 }
 
+
+ // GET all comments
+router.get("/", async (req, res) => {
+    try {
+        const pool = await getDatabase(req);
+
+        const result = await pool.request().query(`
+            SELECT
+                c.comment_id,
+                c.project_id,
+                c.commenter_id,
+                u.username,
+                c.parent_comment_id,
+                c.comment_text,
+                c.created_at,
+                c.updated_at
+            FROM dbo.project_comments c
+            INNER JOIN dbo.users u
+                ON c.commenter_id = u.user_id
+            ORDER BY c.created_at DESC;
+        `);
+
+        res.json({
+            success: true,
+            comments: result.recordset
+        });
+
+    } catch (error) {
+        console.error("Get all comments error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to retrieve comments."
+        });
+    }
+});
+
+
+
 // GET all comments for a project, including replies
 router.get("/project/:projectId", async (req, res) => {
     try {
