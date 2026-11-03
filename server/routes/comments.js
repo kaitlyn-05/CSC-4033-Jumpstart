@@ -90,10 +90,13 @@ router.get("/project/:projectId", async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Get project comments error:", error);
+        console.error("Get all comments error:", error);
+
         res.status(500).json({
             success: false,
-            message: "Unable to retrieve comments."
+            message: error.message,
+            code: error.code || null,
+            number: error.number || null
         });
     }
 });
