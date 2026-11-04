@@ -66,7 +66,7 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
   // Populate from verified login when authentication is implemented.
-  const currentUserId = null;
+  const currentUserId = 1;
   const [listPage, setListPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [reload, setReload] = useState(0);
