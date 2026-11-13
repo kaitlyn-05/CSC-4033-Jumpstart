@@ -4,18 +4,6 @@ const express = require("express");
 const cors = require("cors");
 const sql = require("mssql");
 
-
-const app = express();
-const PORT = process.env.PORT || 5000;
-
-
-app.use(cors());
-
-app.use(express.json());
-
-
-const sql = require("mssql");
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -69,9 +57,9 @@ function loadRoute(name, path, routePath) {
     try {
         const router = require(path);
         app.use(routePath, router);
-        console.log(`SUCCESS: Loaded ${name}`);
+        console.log(SUCCESS: Loaded ${name});
     } catch (error) {
-        console.error(`FAILED: Loading ${name}`, error);
+        console.error(FAILED: Loading ${name}, error);
     }
 }
 
@@ -82,5 +70,5 @@ loadRoute("contributors", "./routes/contributors", "/api/contributors");
 loadRoute("users", "./routes/users", "/api/users");
 
 app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Jumpstart server running on port ${PORT}`);
+    console.log(Jumpstart server running on port ${PORT});
 });
