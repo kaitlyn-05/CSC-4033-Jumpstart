@@ -1,8 +1,16 @@
+const cookieParser = require("cookie-parser");
 
 require("dotenv").config();
 
-const express = require("express");
-const cors = require("cors");
+
+app.use(cors({
+    origin: process.env.FRONTEND_ORIGIN,
+    credentials: true
+}));
+
+app.use(express.json());
+app.use(cookieParser());
+
 const sql = require("mssql");
 
 const app = express();

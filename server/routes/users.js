@@ -27,6 +27,15 @@ function generateToken(user) {
         throw new Error("JWT_SECRET is not configured.");
     }
 
+    function setAuthCookie(res, token) {
+    res.cookie("token", token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        maxAge: 24 * 60 * 60 * 1000
+    });
+}
+
     return jwt.sign(
         {
             user_id: user.user_id,
@@ -142,11 +151,13 @@ router.post("/register", async (req, res) => {
 
         const user = result.recordset[0];
 
+        const token = generateToken(user);
+        setAuthCookie(res, token);
+
         res.status(201).json({
             success: true,
             message: "Account created successfully.",
-            user: formatUser(user),
-            token: generateToken(user)
+            user: formatUser(user)
         });
 
     } catch (error) {
@@ -221,11 +232,13 @@ router.post("/login", async (req, res) => {
             });
         }
 
+        const token = generateToken(user);
+        setAuthCookie(res, token);
+
         res.json({
             success: true,
             message: "Login successful.",
-            user: formatUser(user),
-            token: generateToken(user)
+            user: formatUser(user)
         });
 
     } catch (error) {
@@ -399,9 +412,70 @@ router.put("/:id", async (req, res) => {
     }
 });
 
-module.exports = router;
+// GET /api/users/me
+// Retrieve the currently logged-in user
+router.get("/me", async (req, res) => {
+    try {
+        const token = req.cookies?.token;
 
+        if (!token) {
+            return res.status(401).json({
+                success: false,
+                error: "Not logged in."
+            });
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        const pool = await getDatabase(req);
+
+        const result = await pool.request()
+            .input("user_id", sql.Int, decoded.user_id)
+            .query(`
+                SELECT user_id, username, email, created_at, status
+                FROM dbo.users
+                WHERE user_id = @user_id;
+            `);
+
+        if (
+            result.recordset.length === 0 ||
+            result.recordset[0].status !== "active"
+        ) {
+            return res.status(401).json({
+                success: false,
+                error: "User not found or account inactive."
+            });
+        }
+
+        res.json({
+            success: true,
+            user: formatUser(result.recordset[0])
+        });
+
+    } catch (error) {
+        res.status(401).json({
+            success: false,
+            error: "Invalid or expired session."
+        });
     }
 });
 
+
+// POST /api/users/logout
+// Log out the current user
+router.post("/logout", (req, res) => {
+    res.clearCookie("token", {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none"
+    });
+
+    res.json({
+        success: true,
+        message: "Logged out successfully."
+    });
+});
+
+
 module.exports = router;
+
