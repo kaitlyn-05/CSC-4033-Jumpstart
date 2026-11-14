@@ -3,6 +3,7 @@ const express = require("express");
 const sql = require("mssql");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const authenticateToken = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -253,6 +254,61 @@ router.post("/login", async (req, res) => {
 
 
 // ==========================================
+// GET /api/users/me
+// Retrieve the currently logged-in user
+// ==========================================
+
+router.get("/me", authenticateToken, async (req, res) => {
+    try {
+        const pool = await getDatabase(req);
+
+        // Get the user ID from the verified JWT token.
+        const result = await pool.request()
+            .input("user_id", sql.Int, req.user.user_id)
+            .query(`
+                SELECT
+                    user_id,
+                    username,
+                    email,
+                    created_at,
+                    status
+                FROM dbo.users
+                WHERE user_id = @user_id;
+            `);
+
+        if (result.recordset.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: "User not found."
+            });
+        }
+
+        const user = result.recordset[0];
+
+        // Do not allow inactive accounts to continue using the API.
+        if (user.status !== "active") {
+            return res.status(403).json({
+                success: false,
+                error: "Your account is not active."
+            });
+        }
+
+        res.json({
+            success: true,
+            user: formatUser(user)
+        });
+
+    } catch (error) {
+        console.error("Current user retrieval error:", error);
+
+        res.status(500).json({
+            success: false,
+            error: "Unable to retrieve current user."
+        });
+    }
+});
+
+// ==========================================
 // GET /api/users/:id
 // Retrieve a user
 // ==========================================
@@ -412,70 +468,4 @@ router.put("/:id", async (req, res) => {
     }
 });
 
-// GET /api/users/me
-// Retrieve the currently logged-in user
-router.get("/me", async (req, res) => {
-    try {
-        const token = req.cookies?.token;
-
-        if (!token) {
-            return res.status(401).json({
-                success: false,
-                error: "Not logged in."
-            });
-        }
-
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-        const pool = await getDatabase(req);
-
-        const result = await pool.request()
-            .input("user_id", sql.Int, decoded.user_id)
-            .query(`
-                SELECT user_id, username, email, created_at, status
-                FROM dbo.users
-                WHERE user_id = @user_id;
-            `);
-
-        if (
-            result.recordset.length === 0 ||
-            result.recordset[0].status !== "active"
-        ) {
-            return res.status(401).json({
-                success: false,
-                error: "User not found or account inactive."
-            });
-        }
-
-        res.json({
-            success: true,
-            user: formatUser(result.recordset[0])
-        });
-
-    } catch (error) {
-        res.status(401).json({
-            success: false,
-            error: "Invalid or expired session."
-        });
-    }
-});
-
-
-// POST /api/users/logout
-// Log out the current user
-router.post("/logout", (req, res) => {
-    res.clearCookie("token", {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none"
-    });
-
-    res.json({
-        success: true,
-        message: "Logged out successfully."
-    });
-});
-
-
 module.exports = router;
-
