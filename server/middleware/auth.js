@@ -1,5 +1,6 @@
 
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 
 // Check whether a user has a valid authentication token.
 function authenticateToken(req, res, next) {
@@ -22,6 +23,15 @@ function authenticateToken(req, res, next) {
         // Verify the token using the secret from .env.
         console.log("JWT_SECRET exists:", !!process.env.JWT_SECRET);
         console.log("JWT_SECRET length:", process.env.JWT_SECRET?.length);
+        console.log(
+            "JWT verification fingerprint:",
+            crypto.createHash("sha256")
+                .update(process.env.JWT_SECRET)
+                .digest("hex")
+                .substring(0, 12),
+            "PID:",
+            process.pid
+        );
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 

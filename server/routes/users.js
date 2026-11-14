@@ -3,6 +3,7 @@ const express = require("express");
 const sql = require("mssql");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const authenticateToken = require("../middleware/auth");
 
 const router = express.Router();
@@ -28,15 +29,16 @@ function generateToken(user) {
         throw new Error("JWT_SECRET is not configured.");
     }
 
-    function setAuthCookie(res, token) {
-    res.cookie("token", token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none",
-        maxAge: 24 * 60 * 60 * 1000
-    });
-}
 
+    console.log(
+        "JWT signing fingerprint:",
+        crypto.createHash("sha256")
+            .update(process.env.JWT_SECRET)
+            .digest("hex")
+            .substring(0, 12),
+        "PID:",
+        process.pid
+    );
     return jwt.sign(
         {
             user_id: user.user_id,
@@ -153,12 +155,13 @@ router.post("/register", async (req, res) => {
         const user = result.recordset[0];
 
         const token = generateToken(user);
-        setAuthCookie(res, token);
+        
 
         res.status(201).json({
             success: true,
             message: "Account created successfully.",
-            user: formatUser(user)
+            user: formatUser(user),
+            token: token
         });
 
     } catch (error) {
