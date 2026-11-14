@@ -1,5 +1,17 @@
+
 import React, { useEffect, useState } from 'react';
 import './App.css';
+
+// Create a safe fingerprint of a JWT without displaying the JWT itself.
+async function getTokenFingerprint(token) {
+  const bytes = new TextEncoder().encode(token);
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+
+  return Array.from(new Uint8Array(hash))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .substring(0, 12);
+}
 
 // Render a reusable SVG icon using the path associated with its name.
 function Icon({ name }) {
@@ -157,6 +169,12 @@ export default function App() {
 
     async function verifyLogin() {
       try {
+        // Diagnostic: fingerprint the token being sent to the backend.
+        console.log(
+          'FRONTEND verification token fingerprint:',
+          await getTokenFingerprint(token)
+        );
+
         const response = await fetch(API_BASE + '/users/me', {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -389,6 +407,12 @@ export default function App() {
       if (!data.token || !data.user) {
         throw new Error('The server did not return a login token and user.');
       }
+
+      // Diagnostic: fingerprint the token returned by the login endpoint.
+      console.log(
+        'FRONTEND login token fingerprint:',
+        await getTokenFingerprint(data.token)
+      );
 
       localStorage.setItem('jumpstartToken', data.token);
       setToken(data.token);
