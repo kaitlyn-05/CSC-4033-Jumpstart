@@ -2,16 +2,29 @@
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 
+// Create a fingerprint without displaying the actual token.
+function fingerprint(value) {
+    return crypto.createHash("sha256")
+        .update(value)
+        .digest("hex")
+        .substring(0, 12);
+}
+
 // Check whether a user has a valid authentication token.
 function authenticateToken(req, res, next) {
 
-    // Get the token from the Authorization header.
+    // Get the Authorization header.
     const authHeader = req.headers.authorization;
 
-    // The expected format is: Bearer TOKEN
-    const token = authHeader && authHeader.split(" ")[1];
+    console.log("AUTHORIZATION header exists:", !!authHeader);
+    console.log("AUTHORIZATION format:", authHeader?.split(" ")[0]);
 
-    // If no token was provided, reject the request.
+    // Extract the token.
+    const parts = authHeader ? authHeader.trim().split(/\s+/) : [];
+    const token = parts.length === 2 && parts[0] === "Bearer"
+        ? parts[1]
+        : null;
+
     if (!token) {
         return res.status(401).json({
             success: false,
@@ -20,33 +33,15 @@ function authenticateToken(req, res, next) {
     }
 
     try {
-        // Verify the token using the secret from .env.
-        console.log("JWT_SECRET exists:", !!process.env.JWT_SECRET);
-        console.log("JWT_SECRET length:", process.env.JWT_SECRET?.length);
-        console.log(
-            "JWT verification fingerprint:",
-            crypto.createHash("sha256")
-                .update(process.env.JWT_SECRET)
-                .digest("hex")
-                .substring(0, 12),
-            "PID:",
-            process.pid
-        );
-        console.log(
-            "RECEIVED token fingerprint:",
-            crypto.createHash("sha256")
-                .update(token)
-                .digest("hex")
-                .substring(0, 12)
-        );
+        console.log("EXTRACTED token fingerprint:", fingerprint(token));
+        console.log("JWT verification fingerprint:",
+            fingerprint(process.env.JWT_SECRET));
+
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
         console.log("JWT verification successful for user:", decoded.user_id);
 
-        // Save the logged-in user's information for the route.
         req.user = decoded;
-
-        // Continue to the requested route.
         next();
 
     } catch (error) {
