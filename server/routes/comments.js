@@ -383,4 +383,75 @@ router.put("/:id", async (req, res) => {
     }
 });
 
+
+// DELETE an existing comment
+router.delete("/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { commenter_id } = req.body;
+
+        if (!isValidId(id) || !isValidId(commenter_id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid comment ID and commenter_id are required."
+            });
+        }
+
+        const pool = await getDatabase(req);
+
+        const result = await pool.request()
+            .input("id", sql.Int, Number(id))
+            .input("commenterId", sql.Int, Number(commenter_id))
+            .query(`
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM dbo.project_comments
+                    WHERE comment_id = @id
+                )
+                    THROW 50001, 'Comment not found.', 1;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM dbo.project_comments
+                    WHERE comment_id = @id
+                      AND commenter_id = @commenterId
+                )
+                    THROW 50002, 'You do not own this comment.', 1;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM dbo.project_comments
+                    WHERE parent_comment_id = @id
+                )
+                    THROW 50003, 'Cannot delete a comment that has replies.', 1;
+
+                DELETE FROM dbo.project_comments
+                OUTPUT DELETED.comment_id
+                WHERE comment_id = @id
+                  AND commenter_id = @commenterId;
+            `);
+
+        res.json({
+            success: true,
+            message: "Comment deleted successfully.",
+            comment_id: result.recordset[0].comment_id
+        });
+
+    } catch (error) {
+        console.error("Delete comment error:", error);
+
+        const statusCodes = {
+            50001: 404,
+            50002: 403,
+            50003: 409
+        };
+
+        res.status(statusCodes[error.number] || 500).json({
+            success: false,
+            message: error.message || "Unable to delete comment."
+        });
+    }
+});
+
+
 module.exports = router;
