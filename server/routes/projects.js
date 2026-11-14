@@ -1,7 +1,7 @@
 
 const express = require("express");
 const sql = require("mssql");
-
+const authenticateToken = require("../middleware/auth");
 const router = express.Router();
 
 // Validate positive integer IDs.
@@ -261,16 +261,16 @@ router.get("/:id", async (req, res) => {
 
 // POST /api/projects
 // Create a project.
-router.post("/", async (req, res) => {
+router.post("/", authenticateToken, async (req, res) => {
     try {
         const {
             project_name,
             description,
             goal_hours,
-            owner_id,
             category_id
         } = req.body;
-
+        // Get the owner ID from the verified login token.
+        const owner_id = req.user.user_id;
         if (
             typeof project_name !== "string" ||
             !project_name.trim() ||
@@ -357,7 +357,7 @@ router.post("/", async (req, res) => {
 
 // PUT /api/projects/:id
 // Update a project.
-router.put("/:id", async (req, res) => {
+router.put("/:id", authenticateToken, async (req, res) => {
     try {
         const projectId = Number(req.params.id);
 
@@ -371,7 +371,6 @@ router.put("/:id", async (req, res) => {
 
         if (
             !isPositiveInteger(projectId) ||
-            !isPositiveInteger(owner_id) ||
             typeof project_name !== "string" ||
             !project_name.trim() ||
             project_name.trim().length > 255 ||
@@ -408,7 +407,7 @@ router.put("/:id", async (req, res) => {
             .input("project_name", sql.NVarChar(255), project_name.trim())
             .input("description", sql.NVarChar(sql.MAX), description ?? "")
             .input("goal_hours", sql.Decimal(7, 2), Number(goal_hours))
-            .input("owner_id", sql.Int, Number(owner_id))
+            .input("owner_id", sql.Int, req.user.user_id)
             .input("category_id", sql.Int, categoryId)
             .query(`
                 UPDATE dbo.projects
@@ -443,18 +442,15 @@ router.put("/:id", async (req, res) => {
 
 // PATCH /api/projects/:id/cancel
 // Cancel a project.
-router.patch("/:id/cancel", async (req, res) => {
+router.patch("/:id/cancel", authenticateToken, async (req, res) => {
     try {
         const projectId = Number(req.params.id);
-        const ownerId = Number(req.body.owner_id);
+        
 
-        if (
-            !isPositiveInteger(projectId) ||
-            !isPositiveInteger(ownerId)
-        ) {
+        if (!isPositiveInteger(projectId)) {
             return res.status(400).json({
                 success: false,
-                error: "Valid project ID and owner ID are required."
+                error: "Valid project ID is required."
             });
         }
 
@@ -462,7 +458,7 @@ router.patch("/:id/cancel", async (req, res) => {
 
         const result = await pool.request()
             .input("project_id", sql.Int, projectId)
-            .input("owner_id", sql.Int, ownerId)
+            .input("owner_id", sql.Int, req.user.user_id)
             .query(`
                 UPDATE dbo.projects
                 SET
