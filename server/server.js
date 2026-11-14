@@ -57,9 +57,9 @@ function loadRoute(name, path, routePath) {
     try {
         const router = require(path);
         app.use(routePath, router);
-        console.log(SUCCESS: Loaded ${name});
+        console.log(`SUCCESS: Loaded ${name}`);
     } catch (error) {
-        console.error(FAILED: Loading ${name}, error);
+        console.error(`FAILED: Loading ${name}`, error);
     }
 }
 
@@ -70,5 +70,5 @@ loadRoute("contributors", "./routes/contributors", "/api/contributors");
 loadRoute("users", "./routes/users", "/api/users");
 
 app.listen(PORT, "0.0.0.0", () => {
-    console.log(Jumpstart server running on port ${PORT});
+    console.log(`Jumpstart server running on port ${PORT}`);
 });
