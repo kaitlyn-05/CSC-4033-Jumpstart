@@ -32,7 +32,13 @@ function authenticateToken(req, res, next) {
             "PID:",
             process.pid
         );
-
+        console.log(
+            "RECEIVED token fingerprint:",
+            crypto.createHash("sha256")
+                .update(token)
+                .digest("hex")
+                .substring(0, 12)
+        );
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
         console.log("JWT verification successful for user:", decoded.user_id);
