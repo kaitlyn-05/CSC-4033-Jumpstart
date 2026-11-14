@@ -13,17 +13,11 @@ function fingerprint(value) {
 // Check whether a user has a valid authentication token.
 function authenticateToken(req, res, next) {
 
-    // Get the Authorization header.
-    const authHeader = req.headers.authorization;
+    // Get the login token from our own header.
+    // Azure Static Web Apps replaces the Authorization header, so we can't use it.
+    const token = req.headers["x-auth-token"] || null;
 
-    console.log("AUTHORIZATION header exists:", !!authHeader);
-    console.log("AUTHORIZATION format:", authHeader?.split(" ")[0]);
-
-    // Extract the token.
-    const parts = authHeader ? authHeader.trim().split(/\s+/) : [];
-    const token = parts.length === 2 && parts[0] === "Bearer"
-        ? parts[1]
-        : null;
+    console.log("X-AUTH-TOKEN header exists:", !!token);
 
     if (!token) {
         return res.status(401).json({

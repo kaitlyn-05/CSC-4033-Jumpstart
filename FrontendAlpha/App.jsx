@@ -177,7 +177,7 @@ export default function App() {
 
         const response = await fetch(API_BASE + '/users/me', {
           headers: {
-            Authorization: `Bearer ${token}`,
+            'X-Auth-Token': token,
           },
         });
 
@@ -272,7 +272,7 @@ export default function App() {
             API_BASE + '/projects?' + query,
             {
               signal: controller.signal,
-              headers: token ? { Authorization: `Bearer ${token}` } : {},
+              headers: token ? { 'X-Auth-Token': token } : {},
             }
           );
 
@@ -332,7 +332,7 @@ export default function App() {
           method: editing ? 'PUT' : 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
+            'X-Auth-Token': token,
           },
           body: JSON.stringify({
             project_name: values.name,
@@ -451,7 +451,7 @@ export default function App() {
 
     try {
       const authHeaders = token
-        ? { Authorization: `Bearer ${token}` }
+        ? { 'X-Auth-Token': token }
         : {};
 
       const [projectResponse, contributorResponse] = await Promise.all([
@@ -498,11 +498,11 @@ export default function App() {
         const responses = await Promise.all([
           fetch(API_BASE + '/projects/' + selected.id, {
             signal: controller.signal,
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            headers: token ? { 'X-Auth-Token': token } : {},
           }),
           fetch(API_BASE + '/projects/' + selected.id + '/contributors', {
             signal: controller.signal,
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            headers: token ? { 'X-Auth-Token': token } : {},
           }),
         ]);
 
