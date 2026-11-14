@@ -20,7 +20,12 @@ function authenticateToken(req, res, next) {
 
     try {
         // Verify the token using the secret from .env.
+        console.log("JWT_SECRET exists:", !!process.env.JWT_SECRET);
+        console.log("JWT_SECRET length:", process.env.JWT_SECRET?.length);
+
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        console.log("JWT verification successful for user:", decoded.user_id);
 
         // Save the logged-in user's information for the route.
         req.user = decoded;
@@ -29,6 +34,8 @@ function authenticateToken(req, res, next) {
         next();
 
     } catch (error) {
+        console.error("JWT verification failed:", error.name, error.message);
+
         return res.status(401).json({
             success: false,
             error: "Invalid or expired login token."
