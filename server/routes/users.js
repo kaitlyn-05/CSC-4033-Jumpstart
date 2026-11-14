@@ -177,6 +177,7 @@ router.post("/register", async (req, res) => {
 // Log into an existing account
 // ==========================================
 
+
 router.post("/login", async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -212,7 +213,7 @@ router.post("/login", async (req, res) => {
 
         const user = result.recordset[0];
 
-        // Verify password
+        // Verify password.
         const passwordMatches = await bcrypt.compare(
             password,
             user.password_hash
@@ -225,7 +226,7 @@ router.post("/login", async (req, res) => {
             });
         }
 
-        // Check account status
+        // Check account status.
         if (user.status !== "active") {
             return res.status(403).json({
                 success: false,
@@ -233,13 +234,15 @@ router.post("/login", async (req, res) => {
             });
         }
 
+        // Generate JWT.
         const token = generateToken(user);
-        setAuthCookie(res, token);
 
+        // Return the token to the frontend.
         res.json({
             success: true,
             message: "Login successful.",
-            user: formatUser(user)
+            user: formatUser(user),
+            token: token
         });
 
     } catch (error) {
