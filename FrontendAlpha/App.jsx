@@ -148,6 +148,34 @@ export default function App() {
     () => localStorage.getItem('jumpstartToken') || ''
   );
 
+  // Adding a heartbeat function to track the active users across the website
+  useEffect(() => {
+    if (!token) return;
+
+    const sendHeartbeat = async () => {
+      try {
+        await fetch(API_BASE + '/active-users/heartbeat', {
+          method: 'POST',
+          headers: {
+            'X-Auth-Token': token,
+          },
+        });
+      } catch (error) {
+        console.error('Heartbeat failed:', error);
+      }
+    };
+
+  // Send one immediately after login
+  sendHeartbeat();
+
+  // Continue sending every 60 seconds
+  const heartbeatInterval = setInterval(sendHeartbeat, 60000);
+
+  return () => clearInterval(heartbeatInterval);
+}, [token]);
+
+  
+
   // Information about the currently logged-in user.
   const [currentUser, setCurrentUser] = useState(null);
 
