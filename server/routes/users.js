@@ -240,6 +240,7 @@ router.post("/login", async (req, res) => {
         // Generate JWT.
         const token = generateToken(user);
         console.log(
+            "LOGIN REQUEST ID:", req.requestId,
             "LOGIN token fingerprint:",
             crypto.createHash("sha256")
                 .update(token)

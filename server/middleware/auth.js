@@ -33,7 +33,10 @@ function authenticateToken(req, res, next) {
     }
 
     try {
-        console.log("EXTRACTED token fingerprint:", fingerprint(token));
+        console.log(
+            "AUTH REQUEST ID:", req.requestId,
+            "EXTRACTED token fingerprint:", fingerprint(token)
+        );
         console.log("JWT verification fingerprint:",
             fingerprint(process.env.JWT_SECRET));
 

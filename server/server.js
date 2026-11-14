@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const sql = require("mssql");
+const crypto = require("crypto");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -41,6 +42,12 @@ app.locals.getPool = getPool;
 
 app.use(cors());
 app.use(express.json());
+// Give each request a unique ID so we can match login and verification logs.
+app.use((req, res, next) => {
+    req.requestId = crypto.randomUUID();
+    console.log("REQUEST:", req.requestId, req.method, req.originalUrl);
+    next();
+});
 
 app.get("/", (req, res) => {
     res.send("Jumpstart backend is running!");
