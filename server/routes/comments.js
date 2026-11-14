@@ -1,6 +1,7 @@
 
 const express = require("express");
 const sql = require("mssql");
+const authenticateToken = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -157,14 +158,15 @@ router.get("/:id", async (req, res) => {
 // CREATE a top-level comment
 router.post("/", async (req, res) => {
     try {
-        const { project_id, commenter_id, comment_text } = req.body;
+        const { project_id, comment_text } = req.body;
+        const commenter_id = req.user.user_id;
 
-        if (!isValidId(project_id) || !isValidId(commenter_id)) {
+        if (!isValidId(project_id)) {
             return res.status(400).json({
-                success: false,
-                message: "Valid project_id and commenter_id are required."
-            });
-        }
+        success: false,
+        message: "Valid project_id is required."
+        });
+    }
 
         if (
             typeof comment_text !== "string" ||
@@ -232,14 +234,15 @@ router.post("/", async (req, res) => {
 router.post("/:id/replies", async (req, res) => {
     try {
         const { id } = req.params;
-        const { commenter_id, comment_text } = req.body;
+        const { comment_text } = req.body;
+        const commenter_id = req.user.user_id;
 
-        if (!isValidId(id) || !isValidId(commenter_id)) {
+        if (!isValidId(id)) {
             return res.status(400).json({
-                success: false,
-                message: "Valid comment ID and commenter_id are required."
-            });
-        }
+        success: false,
+        message: "Valid comment ID is required."
+        });
+    }
 
         if (
             typeof comment_text !== "string" ||
@@ -318,7 +321,8 @@ router.post("/:id/replies", async (req, res) => {
 router.put("/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        const { commenter_id, comment_text } = req.body;
+        const { comment_text } = req.body;
+        const commenter_id = req.user.user_id;
 
         if (!isValidId(id) || !isValidId(commenter_id)) {
             return res.status(400).json({
@@ -388,7 +392,7 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        const { commenter_id } = req.body;
+        const commenter_id = req.user.user_id;
 
         if (!isValidId(id) || !isValidId(commenter_id)) {
             return res.status(400).json({
