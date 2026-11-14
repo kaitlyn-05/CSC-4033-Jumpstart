@@ -74,7 +74,10 @@ loadRoute("hello", "./routes/hello", "/api/hello");
 loadRoute("projects", "./routes/projects", "/api/projects");
 loadRoute("comments", "./routes/comments", "/api/comments");
 loadRoute("contributors", "./routes/contributors", "/api/contributors");
+loadRoute("contributors", "./routes/contributions", "/api/contributions");
 loadRoute("users", "./routes/users", "/api/users");
+loadRoute("upvotes", "./routes/upvotes", "/api/upvotes");
+loadRoute("upvotes", "./routes/upvotes", "/api/downvotes");
 
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Jumpstart server running on port ${PORT}`);
