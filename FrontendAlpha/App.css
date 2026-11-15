@@ -256,7 +256,7 @@ button:disabled { opacity: .55; cursor: wait; }
 /* Restore original project detail surfaces and accents. */
 .app-shell:has(.contribution) { background: #fff; }
 .app-shell .contribution .project-summary { background: #d9d9d9; }
-.app-shell .contribution .comments { background: #f4f4f4; }
+.app-shell .contribution .comments { background: #d9d9d9; }
 .app-shell .contribution .comments input,
 .app-shell .contribution .comments textarea,
 .app-shell .contribution .custom-hours input { background: revert; }
@@ -267,4 +267,16 @@ button:disabled { opacity: .55; cursor: wait; }
 .app-shell .project-card .project-actions button[aria-pressed=true] {
   background: transparent;
   color: #b91c28;
+}
+
+/* Outline the project details and separate its contribution sections. */
+.app-shell .contribution {
+  border: 1px solid #171717;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.app-shell .contribution > h3 {
+  border-top: 1px solid #aaa;
+  padding-top: 14px;
 }
