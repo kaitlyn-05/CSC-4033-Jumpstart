@@ -199,3 +199,52 @@ button:disabled { opacity: .55; cursor: wait; }
   box-shadow: 0 0 0 1000px #d9d9d9 inset;
   -webkit-text-fill-color: #171717;
 }
+
+/* Match the account palette throughout the workspace. */
+.app-shell { background: #fff1e9; }
+.app-shell .page-header,
+.app-shell .bottom-nav,
+.app-shell .search-bar,
+.app-shell .project-card,
+.app-shell .project-form-panel,
+.app-shell .blue-button,
+.app-shell .gray-button { background: #dbb29a; }
+
+.app-shell .blue-button { color: #241913; }
+
+.app-shell .search-bar input,
+.app-shell .project-form-panel input:not([type=file]),
+.app-shell .project-form-panel textarea,
+.app-shell .comments input,
+.app-shell .comments textarea,
+.app-shell .custom-hours input { background: #d9d9d9; }
+
+.app-shell .project-summary,
+.app-shell .owned-summary,
+.app-shell .comments,
+.app-shell .file-label,
+.app-shell .home-pagination { background: #fff1e9; }
+
+.app-shell .bottom-nav button[aria-current=page],
+.app-shell .project-actions button[aria-pressed=true] { background: #fff1e9; color: #241913; }
+
+.app-shell progress,
+.app-shell .contribution input[type=radio] { accent-color: #9b6047; }
+
+.app-shell .search-bar,
+.app-shell .project-card,
+.app-shell .project-summary,
+.app-shell .owned-summary,
+.app-shell .project-form-panel,
+.app-shell .comments,
+.app-shell .file-label,
+.app-shell .home-pagination,
+.app-shell input:not([type=radio]):not([type=checkbox]),
+.app-shell textarea,
+.app-shell .blue-button,
+.app-shell .gray-button,
+.app-shell .bottom-nav button,
+.app-shell .project-actions button { border-radius: 12px; }
+
+.app-shell .page-header { border-radius: 0 0 12px 12px; }
+.app-shell .bottom-nav { border-radius: 12px 12px 0 0; }
