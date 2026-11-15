@@ -1,17 +1,43 @@
 /* Welcome and account layouts with responsive spacing and heading sizes. */
-.welcome-page, .account-page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 70px 24px 24px; }
+.welcome-page, .account-page { background: #fff1e9; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 70px 24px 24px; }
 .welcome-page h1 { font-size: clamp(36px, 5vw, 64px); margin: 16px 0 0; }
 .welcome-actions { display: flex; flex-direction: column; align-items: center; gap: 65px; margin-top: clamp(90px, 20vh, 190px); }
 /* Shared primary and text-only buttons. */
 .blue-button { background: #2929ee; color: white; font-size: 28px; font-weight: bold; border: 0; padding: 7px 20px; }
 .blue-button.small { font-size: 19px; }
+.welcome-actions .blue-button,
+.account-form .blue-button {
+  border-radius: 12px;
+  background: #dbb29a;
+  color: #241913;
+  width: min(100%, 280px);
+  min-height: 60px;
+  padding: 14px 24px;
+  font-size: clamp(24px, 4vw, 32px);
+}
 .text-button { background: none; border: 0; text-decoration: underline; padding: 10px; font-size: 15px; }
 /* Connection feedback and login/signup fields. */
 .backend-message { margin-top: auto; padding-top: 35px; color: #555; font-size: 13px; text-align: center; }
-.account-form { width: min(800px, 85%); display: flex; flex-direction: column; align-items: center; gap: clamp(45px, 12vh, 120px); }
-.account-form input { width: 100%; background: #d9d9d9; border: 0; text-align: center; padding: 28px 12px; font-size: clamp(20px, 3vw, 38px); font-weight: bold; }
+.account-form { width: min(800px, 85%); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.account-form label {
+  font-size: clamp(24px, 4vw, 34px);
+  font-weight: 700;
+}
+.account-form label:not(:first-child) { margin-top: 16px; }
+.account-form .blue-button {
+  margin-top: 16px;
+  font-size: clamp(30px, 5vw, 38px);
+  width: fit-content;
+  max-width: 100%;
+  min-height: 0;
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+.account-form input { width: 100%; background: #d9d9d9; border: 0; text-align: center; padding: 20px 12px; border-radius: 12px; font-size: clamp(20px, 3vw, 38px); font-weight: bold; }
 .account-form input::placeholder { color: #171717; opacity: 1; }
 .account-page .notice { margin-top: 25px; }
+.account-page > .text-button { margin-top: 18px; }
 /* Workspace layout: bottom padding reserves space for the fixed navigation. */
 .app-shell { min-height: 100vh; padding-bottom: 110px; }
 .page-header { background: #d9d9d9; text-align: center; padding: 10px 20px; }
@@ -139,3 +165,37 @@ button:disabled { opacity: .55; cursor: wait; }
 .contribute-form .notice { color: #8a1c1c; }
 .contribution .progress { margin: 16px 0; }
 .pledge-list { margin: 0; padding-left: 18px; font-size: 13px; }
+
+/* Show the existing heading on both account screens. */
+.account-page > h1.sr-only {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0 0 24px;
+  padding: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+  font-size: clamp(32px, 6vw, 48px);
+  text-align: center;
+  text-decoration: underline;
+}
+
+/* Restore the wider button on the login form only. */
+.account-form:has(input[autocomplete="current-password"]) .blue-button {
+  width: min(100%, 280px);
+  min-height: 60px;
+  padding: 14px 24px;
+  font-size: clamp(28px, 5vw, 36px);
+}
+
+/* Both account screens share the signup input color. */
+.account-form input[type="email"],
+.account-form input[type="password"] {
+  background-color: #d9d9d9;
+}
+/* Match the normal input fill when Chrome or Edge autofills credentials. */
+.account-form input:-webkit-autofill {
+  box-shadow: 0 0 0 1000px #d9d9d9 inset;
+  -webkit-text-fill-color: #171717;
+}
