@@ -271,12 +271,18 @@ button:disabled { opacity: .55; cursor: wait; }
 
 /* Outline the project details and separate its contribution sections. */
 .app-shell .contribution {
+  background: #fff1e9;
   border: 1px solid #171717;
   border-radius: 12px;
   padding: 16px;
 }
 
 .app-shell .contribution > h3 {
-  border-top: 1px solid #aaa;
+  border-top: 1px solid #555;
   padding-top: 14px;
+}
+/* Hide the welcome screen's backend test controls. */
+.welcome-page > .backend-message + div,
+.welcome-page > .backend-message + div + p[role="status"] {
+  display: none;
 }
