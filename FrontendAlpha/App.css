@@ -128,3 +128,14 @@ button:disabled { opacity: .55; cursor: wait; }
   .home-pagination .gray-button { padding: 8px 12px; }
 }
 
+/* Likes, saved comments, contributions, and project deletion. */
+.card-links { display: flex; flex-direction: column; align-items: center; align-self: start; gap: 4px; }
+.card-links .text-button { padding: 4px; font-size: 13px; }
+.comments .comment { margin: 0 0 12px; }
+.comments .comment.reply { margin-left: 24px; }
+.comments .comment small { color: #555; }
+.comments .notice { color: #555; margin: 0 0 8px; text-align: left; }
+.contribute-form label { display: block; margin-bottom: 12px; }
+.contribute-form .notice { color: #8a1c1c; }
+.contribution .progress { margin: 16px 0; }
+.pledge-list { margin: 0; padding-left: 18px; font-size: 13px; }

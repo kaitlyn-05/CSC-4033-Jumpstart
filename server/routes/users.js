@@ -3,7 +3,6 @@ const express = require("express");
 const sql = require("mssql");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
 const authenticateToken = require("../middleware/auth");
 
 const router = express.Router();
@@ -30,15 +29,6 @@ function generateToken(user) {
     }
 
 
-    console.log(
-        "JWT signing fingerprint:",
-        crypto.createHash("sha256")
-            .update(process.env.JWT_SECRET)
-            .digest("hex")
-            .substring(0, 12),
-        "PID:",
-        process.pid
-    );
     return jwt.sign(
         {
             user_id: user.user_id,
@@ -84,10 +74,10 @@ router.post("/register", async (req, res) => {
         const cleanUsername = username.trim();
         const cleanEmail = email.trim().toLowerCase();
 
-        if (cleanUsername.length < 3 || cleanUsername.length > 50) {
+        if (cleanUsername.length < 3 || cleanUsername.length > 30) {
             return res.status(400).json({
                 success: false,
-                error: "Username must be between 3 and 50 characters."
+                error: "Username must be between 3 and 30 characters."
             });
         }
 
@@ -239,14 +229,6 @@ router.post("/login", async (req, res) => {
 
         // Generate JWT.
         const token = generateToken(user);
-        console.log(
-            "LOGIN REQUEST ID:", req.requestId,
-            "LOGIN token fingerprint:",
-            crypto.createHash("sha256")
-                .update(token)
-                .digest("hex")
-                .substring(0, 12)
-        );
 
         // Return the token to the frontend.
         res.json({
@@ -378,10 +360,10 @@ router.get("/:id", async (req, res) => {
 
 // ==========================================
 // PUT /api/users/:id
-// Update username and email
+// Update your own username and email (login required)
 // ==========================================
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
         const { username, email } = req.body;
@@ -390,6 +372,14 @@ router.put("/:id", async (req, res) => {
             return res.status(400).json({
                 success: false,
                 error: "Invalid user ID."
+            });
+        }
+
+        // Users may only update their own account.
+        if (Number(id) !== Number(req.user.user_id)) {
+            return res.status(403).json({
+                success: false,
+                error: "You can only update your own account."
             });
         }
 
@@ -406,10 +396,10 @@ router.put("/:id", async (req, res) => {
         const cleanUsername = username.trim();
         const cleanEmail = email.trim().toLowerCase();
 
-        if (cleanUsername.length < 3 || cleanUsername.length > 50) {
+        if (cleanUsername.length < 3 || cleanUsername.length > 30) {
             return res.status(400).json({
                 success: false,
-                error: "Invalid username length."
+                error: "Username must be between 3 and 30 characters."
             });
         }
 

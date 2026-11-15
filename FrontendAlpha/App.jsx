@@ -2,15 +2,34 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
 
-// Create a safe fingerprint of a JWT without displaying the JWT itself.
-async function getTokenFingerprint(token) {
-  const bytes = new TextEncoder().encode(token);
-  const hash = await crypto.subtle.digest('SHA-256', bytes);
+// Preserve the project's existing relative /api routing and deployment configuration.
+const API_BASE = '/api';
 
-  return Array.from(new Uint8Array(hash))
-    .map(byte => byte.toString(16).padStart(2, '0'))
-    .join('')
-    .substring(0, 12);
+// Call the backend and return its JSON, or throw an Error with the server's message.
+// The JWT goes in X-Auth-Token because Azure Static Web Apps replaces Authorization.
+async function callApi(path, { method = 'GET', token, body, signal } = {}) {
+  const headers = {};
+
+  if (token) headers['X-Auth-Token'] = token;
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+
+  const response = await fetch(API_BASE + path, {
+    method,
+    headers,
+    signal,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  // Some failures (for example a missing route) do not return JSON.
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || data.success === false) {
+    throw new Error(
+      data.error || data.message || 'Request failed (' + response.status + ').'
+    );
+  }
+
+  return data;
 }
 
 // Render a reusable SVG icon using the path associated with its name.
@@ -49,11 +68,10 @@ function ProjectSummary({ project }) {
       <div>
         <h2>{project.name}</h2>
         <p>{project.description}</p>
-        {project.file && <small>Attachment: {project.file}</small>}
       </div>
       <div className="project-meta">
         <span>{project.user}</span>
-        <span>{project.hours}hr completed</span>
+        <span>{project.pledgedHours} of {project.goal}hr pledged</span>
       </div>
     </div>
   );
@@ -124,8 +142,157 @@ function ProjectForm({ project, onSave, onCancel, saving }) {
   );
 }
 
-// Preserve the project's existing relative /api routing and deployment configuration.
-const API_BASE = '/api';
+// Saved comments for one project, with a form to add a new one.
+function Comments({ projectId, token, onCountChange }) {
+  const [comments, setComments] = useState([]);
+  const [status, setStatus] = useState('Loading comments…');
+  const [posting, setPosting] = useState(false);
+  const [reload, setReload] = useState(0);
+
+  // Load the comments when the panel opens and again after posting.
+  useEffect(() => {
+    let cancelled = false;
+
+    callApi('/comments/project/' + projectId)
+      .then(data => {
+        if (cancelled) return;
+        setComments(data.comments);
+        setStatus('');
+        if (onCountChange) onCountChange(data.comments.length);
+      })
+      .catch(error => {
+        if (!cancelled) setStatus(error.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, reload]);
+
+  async function submit(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const commentText = String(new FormData(form).get('comment') || '').trim();
+
+    if (!commentText || posting) return;
+
+    setPosting(true);
+    setStatus('');
+
+    try {
+      await callApi('/comments', {
+        method: 'POST',
+        token,
+        body: { project_id: projectId, comment_text: commentText },
+      });
+
+      form.reset();
+      setReload(value => value + 1);
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  return (
+    <div className="comments">
+      <h3>Comments</h3>
+      <p className="notice" role="status">{status}</p>
+      {!status && !comments.length && <p>No comments yet.</p>}
+
+      {comments.map(comment => (
+        <p
+          key={comment.comment_id}
+          className={comment.parent_comment_id ? 'comment reply' : 'comment'}
+        >
+          <strong>{comment.username}</strong>{' '}
+          <small>{new Date(comment.created_at).toLocaleString()}</small>
+          <br />
+          {comment.comment_text}
+        </p>
+      ))}
+
+      <form onSubmit={submit}>
+        <input
+          name="comment"
+          aria-label="New comment"
+          required
+          maxLength={2000}
+          pattern=".*\S.*"
+        />
+        <button className="gray-button" disabled={posting}>
+          {posting ? 'Posting…' : 'Post'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// Form for pledging hours to a project.
+function ContributeForm({ project, token, autoFocus, onPledged }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  if (project.status !== 'open') {
+    return <p>This project is {project.status} and is not accepting hours.</p>;
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const hours = Number(new FormData(form).get('hours'));
+
+    if (busy) return;
+
+    if (!Number.isFinite(hours) || hours <= 0 || hours > 99999.99) {
+      setError('Enter a number of hours greater than zero.');
+      return;
+    }
+
+    setBusy(true);
+    setError('');
+
+    try {
+      await callApi('/contributions', {
+        method: 'POST',
+        token,
+        body: { project_id: project.id, hours_committed: hours },
+      });
+
+      form.reset();
+      onPledged(hours);
+    } catch (problem) {
+      setError(problem.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="contribute-form" onSubmit={submit}>
+      <label htmlFor="pledge-hours">Hours you want to contribute</label>
+      <div className="custom-hours">
+        <input
+          id="pledge-hours"
+          name="hours"
+          type="number"
+          min="0.01"
+          max="99999.99"
+          step="0.01"
+          required
+          autoFocus={autoFocus}
+        />
+        <button className="blue-button small" type="submit" disabled={busy}>
+          {busy ? 'Saving…' : 'Contribute'}
+        </button>
+      </div>
+      <p className="notice" role="alert">{error}</p>
+    </form>
+  );
+}
 
 export default function App() {
   const [page, setPage] = useState('welcome');
@@ -142,6 +309,13 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [accountLoading, setAccountLoading] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsReload, setDetailsReload] = useState(0);
+  const [focusContribute, setFocusContribute] = useState(false);
+  const [likingId, setLikingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+
+  // Contributors for each project on My Projects, keyed by project ID.
+  const [pledges, setPledges] = useState({});
 
   // Keep the JWT in browser storage so a page refresh does not automatically log out.
   const [token, setToken] = useState(
@@ -169,12 +343,6 @@ export default function App() {
 
     async function verifyLogin() {
       try {
-        // Diagnostic: fingerprint the token being sent to the backend.
-        console.log(
-          'FRONTEND verification token fingerprint:',
-          await getTokenFingerprint(token)
-        );
-
         const response = await fetch(API_BASE + '/users/me', {
           headers: {
             'X-Auth-Token': token,
@@ -222,10 +390,11 @@ export default function App() {
       status: p.status,
       hours: Number(p.total_hours_completed || 0),
       pledgedHours: Number(p.total_hours_committed || 0),
+      contributorCount: Number(p.contributor_count || 0),
       contributors: [],
-      file: '',
-      vote: 0,
-      comments: [],
+      likes: Number(p.upvote_count || 0),
+      liked: Boolean(p.user_has_upvoted),
+      commentCount: Number(p.comment_count || 0),
     };
   }
 
@@ -408,12 +577,6 @@ export default function App() {
         throw new Error('The server did not return a login token and user.');
       }
 
-      // Diagnostic: fingerprint the token returned by the login endpoint.
-      console.log(
-        'FRONTEND login token fingerprint:',
-        await getTokenFingerprint(data.token)
-      );
-
       localStorage.setItem('jumpstartToken', data.token);
       setToken(data.token);
       setCurrentUser(data.user);
@@ -443,110 +606,156 @@ export default function App() {
     setNotice('You have been logged out.');
   }
 
-  async function openProject(id) {
-    if (detailsLoading) return;
+  // Open the details screen. The effect below loads the saved details.
+  function openProject(id, wantsToContribute = false) {
+    const known = projects.find(project => project.id === id);
 
-    setDetailsLoading(true);
+    if (!known) return;
+
+    setSelected({ ...known, contributors: [] });
+    setFocusContribute(wantsToContribute);
+    setCommentsFor(null);
     setNotice('');
-
-    try {
-      const authHeaders = token
-        ? { 'X-Auth-Token': token }
-        : {};
-
-      const [projectResponse, contributorResponse] = await Promise.all([
-        fetch(API_BASE + '/projects/' + id, { headers: authHeaders }),
-        fetch(API_BASE + '/projects/' + id + '/contributors', { headers: authHeaders }),
-      ]);
-
-      const [data, contributions] = await Promise.all([
-        projectResponse.json(),
-        contributorResponse.json(),
-      ]);
-
-      if (!projectResponse.ok || !data.success) {
-        throw new Error(data.error || 'Could not load project.');
-      }
-
-      if (!contributorResponse.ok || !contributions.success) {
-        throw new Error(contributions.error || 'Could not load contributors.');
-      }
-
-      setSelected({
-        ...mapProject(data.project),
-        contributors: contributions.contributors,
-        hours: Number(contributions.total_hours_completed),
-        pledgedHours: Number(contributions.total_hours_committed),
-      });
-
-      setPage('details');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setDetailsLoading(false);
-    }
+    setPage('details');
   }
 
-  // Refresh details and contributors after a successful creation or edit.
+  // Load the project and its contributors whenever the details screen is shown.
   useEffect(() => {
     if (!selected || page !== 'details') return;
 
     const controller = new AbortController();
 
-    async function refreshDetails() {
+    async function loadDetails() {
+      setDetailsLoading(true);
+
       try {
-        const responses = await Promise.all([
-          fetch(API_BASE + '/projects/' + selected.id, {
+        const [data, people] = await Promise.all([
+          callApi('/projects/' + selected.id, {
+            token,
             signal: controller.signal,
-            headers: token ? { 'X-Auth-Token': token } : {},
           }),
-          fetch(API_BASE + '/projects/' + selected.id + '/contributors', {
+          callApi('/contributors/project/' + selected.id, {
             signal: controller.signal,
-            headers: token ? { 'X-Auth-Token': token } : {},
           }),
         ]);
-
-        const [data, contributions] = await Promise.all(
-          responses.map(response => response.json())
-        );
-
-        if (!responses[0].ok || !responses[1].ok) {
-          throw new Error(
-            data.error || contributions.error || 'Details unavailable.'
-          );
-        }
 
         if (!controller.signal.aborted) {
           setSelected({
             ...mapProject(data.project),
-            contributors: contributions.contributors,
-            hours: Number(contributions.total_hours_completed),
-            pledgedHours: Number(contributions.total_hours_committed),
+            contributors: people.contributors,
           });
         }
       } catch (error) {
         if (!controller.signal.aborted) {
-          setNotice(
-            'Project record is available, but refreshing details failed: ' +
-            error.message
-          );
+          setNotice('Could not load project details: ' + error.message);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setDetailsLoading(false);
         }
       }
     }
 
-    refreshDetails();
+    loadDetails();
 
-    return () => controller.abort();
-  }, [selected?.id, page, token]);
+    return () => {
+      controller.abort();
+      setDetailsLoading(false);
+    };
+  }, [selected?.id, page, token, detailsReload]);
 
-  // Retained demo interactions; votes/comments are not saved by the project API.
-  function update(id, change) {
+  // Apply a change to one project wherever it is currently shown.
+  function applyToProject(id, changes) {
     setProjects(current =>
       current.map(project =>
-        project.id === id ? { ...project, ...change(project) } : project
+        project.id === id ? { ...project, ...changes } : project
       )
     );
+
+    setSelected(current =>
+      current && current.id === id ? { ...current, ...changes } : current
+    );
   }
+
+  // Like a project, or remove the like if it is already liked.
+  async function toggleLike(project) {
+    if (likingId) return;
+
+    setLikingId(project.id);
+    setNotice('');
+
+    try {
+      const data = await callApi('/upvotes/project/' + project.id, {
+        method: project.liked ? 'DELETE' : 'POST',
+        token,
+      });
+
+      applyToProject(project.id, {
+        liked: !project.liked,
+        likes: Number(data.upvote_count),
+      });
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setLikingId(null);
+    }
+  }
+
+  // Permanently delete one of the current user's projects.
+  async function deleteProject(project) {
+    if (deletingId) return;
+
+    const confirmed = window.confirm(
+      'Delete "' + project.name + '"? This permanently removes the project ' +
+      'and its contributions, likes, and comments.'
+    );
+
+    if (!confirmed) return;
+
+    setDeletingId(project.id);
+    setNotice('');
+
+    try {
+      await callApi('/projects/' + project.id, { method: 'DELETE', token });
+
+      setProjects(current =>
+        current.filter(item => item.id !== project.id)
+      );
+      setSelected(current =>
+        current && current.id === project.id ? null : current
+      );
+      setNotice('"' + project.name + '" was deleted.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  // On My Projects, load who has pledged hours to each of the user's projects.
+  useEffect(() => {
+    if (page !== 'mine' || loading) return;
+
+    let cancelled = false;
+
+    const mine = projects.filter(
+      project => project.ownerId === Number(currentUserId)
+    );
+
+    Promise.all(
+      mine.map(project =>
+        callApi('/contributors/project/' + project.id)
+          .then(data => [project.id, data.contributors])
+          .catch(() => [project.id, null])
+      )
+    ).then(entries => {
+      if (!cancelled) setPledges(Object.fromEntries(entries));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page, loading, projects, currentUserId]);
 
   async function sayHello() {
     setHelloLoading(true);
@@ -645,6 +854,8 @@ export default function App() {
                 placeholder="Create username"
                 autoComplete="username"
                 required
+                minLength={3}
+                maxLength={30}
               />
             </>
           )}
@@ -669,6 +880,8 @@ export default function App() {
               page === 'login' ? 'current-password' : 'new-password'
             }
             required
+            minLength={page === 'signup' ? 8 : undefined}
+            maxLength={72}
           />
 
           <button
@@ -742,7 +955,6 @@ export default function App() {
                     <article className="owned-project" key={project.id}>
                       <div className="manage-actions">
                         <button
-                          disabled={detailsLoading}
                           aria-label={`View details for ${project.name}`}
                           onClick={() => openProject(project.id)}
                         >
@@ -757,6 +969,13 @@ export default function App() {
                         >
                           <Icon name="edit" />
                         </button>
+                        <button
+                          aria-label={`Delete ${project.name}`}
+                          disabled={deletingId === project.id}
+                          onClick={() => deleteProject(project)}
+                        >
+                          <Icon name="trash" />
+                        </button>
                       </div>
 
                       <div className="owned-summary">
@@ -766,60 +985,70 @@ export default function App() {
 
                       <div className="progress">
                         <div>
-                          <span>0hr</span>
+                          <span>{project.pledgedHours}hr pledged</span>
                           <span>Goal: {project.goal}hr</span>
                         </div>
                         <progress
                           aria-label={`${project.name} progress`}
-                          value={Math.min(project.hours, project.goal)}
+                          value={Math.min(project.pledgedHours, project.goal)}
                           max={project.goal}
                         />
                         <p>
-                          {project.hours}hr completed · {project.pledgedHours}hr pledged
+                          {Math.min(100, Math.round((project.pledgedHours / project.goal) * 100))}% of goal · {project.contributorCount} {project.contributorCount === 1 ? 'contributor' : 'contributors'}
                         </p>
+
+                        {pledges[project.id] === null && (
+                          <p>Contributions could not be loaded.</p>
+                        )}
+
+                        {pledges[project.id] && (
+                          pledges[project.id].length ? (
+                            <ul className="pledge-list">
+                              {pledges[project.id].map(person => (
+                                <li key={person.user_id}>
+                                  {person.username}: {Number(person.total_hours_committed)}hr
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p>No contributions yet.</p>
+                          )
+                        )}
                       </div>
                     </article>
                   ) : (
                     <article className="project-card" key={project.id}>
-                      <button
-                        className="contribute-link"
-                        disabled={detailsLoading}
-                        onClick={() => openProject(project.id)}
-                      >
-                        View details
-                      </button>
+                      <div className="card-links">
+                        <button
+                          className="contribute-link"
+                          aria-label={`Contribute to ${project.name}`}
+                          onClick={() => openProject(project.id, true)}
+                        >
+                          <Icon name="clock" />
+                          Contribute
+                        </button>
+                        <button
+                          className="text-button"
+                          aria-label={`View details for ${project.name}`}
+                          onClick={() => openProject(project.id)}
+                        >
+                          View details
+                        </button>
+                      </div>
 
                       <div className="project-card-main">
                         <ProjectSummary project={project} />
 
-                        <small>
-                          Votes and comments below are local demos and reset when projects reload.
-                        </small>
-
                         <div className="project-actions">
                           <button
-                            aria-label={`Upvote ${project.name}`}
-                            aria-pressed={project.vote === 1}
-                            onClick={() =>
-                              update(project.id, project => ({
-                                vote: project.vote === 1 ? 0 : 1,
-                              }))
-                            }
+                            aria-label={`${project.liked ? 'Unlike' : 'Like'} ${project.name}`}
+                            aria-pressed={project.liked}
+                            disabled={likingId === project.id}
+                            onClick={() => toggleLike(project)}
                           >
-                            ↑
+                            {project.liked ? '♥' : '♡'}
                           </button>
-                          <span aria-label="Vote score">{project.vote}</span>
-                          <button
-                            aria-label={`Downvote ${project.name}`}
-                            aria-pressed={project.vote === -1}
-                            onClick={() =>
-                              update(project.id, project => ({
-                                vote: project.vote === -1 ? 0 : -1,
-                              }))
-                            }
-                          >
-                            ↓
-                          </button>
+                          <span aria-label="Likes">{project.likes}</span>
                           <button
                             className="comment-button"
                             aria-label={`Comments for ${project.name}`}
@@ -831,44 +1060,18 @@ export default function App() {
                             }
                           >
                             <Icon name="comment" />
-                            <span>{project.comments.length}</span>
+                            <span>{project.commentCount}</span>
                           </button>
                         </div>
 
                         {commentsFor === project.id && (
-                          <div className="comments">
-                            <h3>Comments</h3>
-                            {!project.comments.length && <p>No comments yet.</p>}
-
-                            {project.comments.map((comment, index) => (
-                              <p key={index}>{comment}</p>
-                            ))}
-
-                            <form
-                              onSubmit={event => {
-                                event.preventDefault();
-                                const commentText = new FormData(
-                                  event.currentTarget
-                                ).get('comment').trim();
-
-                                if (!commentText) return;
-
-                                update(project.id, project => ({
-                                  comments: [...project.comments, commentText],
-                                }));
-
-                                event.currentTarget.reset();
-                              }}
-                            >
-                              <input
-                                name="comment"
-                                aria-label="New comment"
-                                required
-                                maxLength={500}
-                              />
-                              <button className="gray-button">Post</button>
-                            </form>
-                          </div>
+                          <Comments
+                            projectId={project.id}
+                            token={token}
+                            onCountChange={count =>
+                              applyToProject(project.id, { commentCount: count })
+                            }
+                          />
                         )}
 
                         <p>
@@ -929,10 +1132,38 @@ export default function App() {
             <p>Completed: {selected.hours} hours</p>
             <p>Status: {selected.status}</p>
 
-            <progress
-              aria-label="Completed hours toward goal"
-              value={Math.min(selected.hours, selected.goal)}
-              max={selected.goal}
+            <div className="progress">
+              <progress
+                aria-label="Pledged hours toward goal"
+                value={Math.min(selected.pledgedHours, selected.goal)}
+                max={selected.goal}
+              />
+            </div>
+
+            <div className="project-actions">
+              <button
+                aria-label={`${selected.liked ? 'Unlike' : 'Like'} ${selected.name}`}
+                aria-pressed={selected.liked}
+                disabled={likingId === selected.id}
+                onClick={() => toggleLike(selected)}
+              >
+                {selected.liked ? '♥' : '♡'}
+              </button>
+              <span aria-label="Likes">{selected.likes}</span>
+            </div>
+
+            <h3>Contribute time</h3>
+            <ContributeForm
+              key={selected.id}
+              project={selected}
+              token={token}
+              autoFocus={focusContribute}
+              onPledged={hours => {
+                setNotice(
+                  'Thank you! ' + hours + 'hr pledged to ' + selected.name + '.'
+                );
+                setDetailsReload(value => value + 1);
+              }}
             />
 
             <h3>Contributors</h3>
@@ -941,7 +1172,7 @@ export default function App() {
               <ul>
                 {selected.contributors.map(person => (
                   <li key={person.user_id}>
-                    {person.username}: {Number(person.hours_committed)} hours pledged, {Number(person.hours_completed)} hours completed
+                    {person.username}: {Number(person.total_hours_committed)} hours pledged, {Number(person.total_hours_completed)} hours completed
                   </li>
                 ))}
               </ul>
@@ -949,10 +1180,19 @@ export default function App() {
               <p>No contributors yet.</p>
             )}
 
+            <Comments
+              key={selected.id}
+              projectId={selected.id}
+              token={token}
+              onCountChange={count =>
+                applyToProject(selected.id, { commentCount: count })
+              }
+            />
+
             <button
               className="text-button"
               disabled={detailsLoading}
-              onClick={() => openProject(selected.id)}
+              onClick={() => setDetailsReload(value => value + 1)}
             >
               Refresh details
             </button>

@@ -95,9 +95,7 @@ router.get("/project/:projectId", async (req, res) => {
 
         res.status(500).json({
             success: false,
-            message: error.message,
-            code: error.code || null,
-            number: error.number || null
+            message: "Unable to retrieve comments."
         });
     }
 });
@@ -156,7 +154,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // CREATE a top-level comment
-router.post("/", async (req, res) => {
+router.post("/", authenticateToken, async (req, res) => {
     try {
         const { project_id, comment_text } = req.body;
         const commenter_id = req.user.user_id;
@@ -223,15 +221,17 @@ router.post("/", async (req, res) => {
 
     } catch (error) {
         console.error("Create comment error:", error);
-        res.status(500).json({
+        res.status(error.number === 50001 ? 404 : 500).json({
             success: false,
-            message: "Unable to create comment."
+            message: error.number === 50001
+                ? "Project not found."
+                : "Unable to create comment."
         });
     }
 });
 
 // REPLY to an existing comment
-router.post("/:id/replies", async (req, res) => {
+router.post("/:id/replies", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
         const { comment_text } = req.body;
@@ -310,15 +310,17 @@ router.post("/:id/replies", async (req, res) => {
 
     } catch (error) {
         console.error("Create reply error:", error);
-        res.status(500).json({
+        res.status(error.number === 50001 ? 404 : 500).json({
             success: false,
-            message: "Unable to create reply."
+            message: error.number === 50001
+                ? "Parent comment not found."
+                : "Unable to create reply."
         });
     }
 });
 
 // UPDATE an existing comment
-router.put("/:id", async (req, res) => {
+router.put("/:id", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
         const { comment_text } = req.body;
@@ -389,7 +391,7 @@ router.put("/:id", async (req, res) => {
 
 
 // DELETE an existing comment
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
         const commenter_id = req.user.user_id;
@@ -452,7 +454,9 @@ router.delete("/:id", async (req, res) => {
 
         res.status(statusCodes[error.number] || 500).json({
             success: false,
-            message: error.message || "Unable to delete comment."
+            message: statusCodes[error.number]
+                ? error.message
+                : "Unable to delete comment."
         });
     }
 });

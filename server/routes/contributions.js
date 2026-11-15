@@ -1,6 +1,7 @@
 
 const express = require("express");
 const sql = require("mssql");
+const authenticateToken = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -148,15 +149,18 @@ router.get("/user/:userId", async (req, res) => {
     }
 });
 
-// CREATE a contribution
-router.post("/", async (req, res) => {
+// CREATE a contribution, or add hours to the one you already have.
+// Each user has one contribution per project, so pledging again adds to it.
+router.post("/", authenticateToken, async (req, res) => {
     try {
-        const { project_id, user_id, hours_committed } = req.body;
+        const { project_id, hours_committed } = req.body;
+        // Get the contributor from the verified login token.
+        const user_id = req.user.user_id;
 
-        if (!isValidId(project_id) || !isValidId(user_id)) {
+        if (!isValidId(project_id)) {
             return res.status(400).json({
                 success: false,
-                message: "Valid project_id and user_id are required."
+                message: "Valid project_id is required."
             });
         }
 
@@ -166,6 +170,8 @@ router.post("/", async (req, res) => {
                 message: "Committed hours must be greater than zero."
             });
         }
+
+        const hours = Number(Number(hours_committed).toFixed(2));
 
         const pool = await getDatabase(req);
         const transaction = new sql.Transaction(pool);
@@ -186,6 +192,15 @@ router.post("/", async (req, res) => {
                     FROM dbo.users
                     WHERE user_id = @userId
                       AND status = 'active';
+
+                    SELECT
+                        contribution_id,
+                        hours_committed,
+                        hours_completed,
+                        status
+                    FROM dbo.project_contributions WITH (UPDLOCK, HOLDLOCK)
+                    WHERE project_id = @projectId
+                      AND user_id = @userId;
                 `);
 
             if (existing.recordsets[0].length === 0) {
@@ -204,13 +219,63 @@ router.post("/", async (req, res) => {
                 });
             }
 
-            const result = await new sql.Request(transaction)
-                .input("projectId", sql.Int, Number(project_id))
-                .input("userId", sql.Int, Number(user_id))
-                .input("hours", sql.Decimal(7, 2), Number(hours_committed))
+            const current = existing.recordsets[2][0];
+
+            // First pledge on this project: create the contribution.
+            if (!current) {
+                const result = await new sql.Request(transaction)
+                    .input("projectId", sql.Int, Number(project_id))
+                    .input("userId", sql.Int, Number(user_id))
+                    .input("hours", sql.Decimal(7, 2), hours)
+                    .query(`
+                        INSERT INTO dbo.project_contributions
+                            (project_id, user_id, hours_committed)
+                        OUTPUT
+                            INSERTED.contribution_id,
+                            INSERTED.project_id,
+                            INSERTED.user_id,
+                            INSERTED.hours_committed,
+                            INSERTED.hours_completed,
+                            INSERTED.status,
+                            INSERTED.committed_at
+                        VALUES
+                            (@projectId, @userId, @hours);
+                    `);
+
+                await transaction.commit();
+
+                return res.status(201).json({
+                    success: true,
+                    message: "Contribution created successfully.",
+                    contribution: result.recordset[0]
+                });
+            }
+
+            // Pledging again: add the new hours to the existing contribution.
+            // A withdrawn contribution restarts from the hours already completed.
+            const previousHours = Number(current.hours_committed);
+            const baseHours = current.status === "withdrawn"
+                ? Number(current.hours_completed)
+                : previousHours;
+            const newHours = Number((baseHours + hours).toFixed(2));
+
+            if (newHours > 99999.99) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: "Total committed hours cannot exceed 99999.99."
+                });
+            }
+
+            const updated = await new sql.Request(transaction)
+                .input("id", sql.Int, current.contribution_id)
+                .input("committed", sql.Decimal(7, 2), newHours)
                 .query(`
-                    INSERT INTO dbo.project_contributions
-                        (project_id, user_id, hours_committed)
+                    UPDATE dbo.project_contributions
+                    SET
+                        hours_committed = @committed,
+                        status = 'active',
+                        updated_at = SYSUTCDATETIME()
                     OUTPUT
                         INSERTED.contribution_id,
                         INSERTED.project_id,
@@ -219,16 +284,29 @@ router.post("/", async (req, res) => {
                         INSERTED.hours_completed,
                         INSERTED.status,
                         INSERTED.committed_at
+                    WHERE contribution_id = @id;
+                `);
+
+            await new sql.Request(transaction)
+                .input("contributionId", sql.Int, current.contribution_id)
+                .input("changedBy", sql.Int, Number(user_id))
+                .input("previousHours", sql.Decimal(7, 2), previousHours)
+                .input("newHours", sql.Decimal(7, 2), newHours)
+                .query(`
+                    INSERT INTO dbo.contribution_history
+                        (contribution_id, changed_by, hours_type,
+                         previous_hours, new_hours)
                     VALUES
-                        (@projectId, @userId, @hours);
+                        (@contributionId, @changedBy, 'committed',
+                         @previousHours, @newHours);
                 `);
 
             await transaction.commit();
 
-            res.status(201).json({
+            res.json({
                 success: true,
-                message: "Contribution created successfully.",
-                contribution: result.recordset[0]
+                message: "Contribution hours added successfully.",
+                contribution: updated.recordset[0]
             });
 
         } catch (error) {
@@ -246,15 +324,17 @@ router.post("/", async (req, res) => {
 });
 
 // UPDATE committed or completed hours
-router.patch("/:id/hours", async (req, res) => {
+router.patch("/:id/hours", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
-        const { user_id, hours_type, hours } = req.body;
+        const { hours_type, hours } = req.body;
+        // Only the contributor can change their own hours.
+        const user_id = req.user.user_id;
 
-        if (!isValidId(id) || !isValidId(user_id)) {
+        if (!isValidId(id)) {
             return res.status(400).json({
                 success: false,
-                message: "Valid contribution ID and user ID are required."
+                message: "Valid contribution ID is required."
             });
         }
 
@@ -395,15 +475,16 @@ router.patch("/:id/hours", async (req, res) => {
 });
 
 // WITHDRAW a contribution
-router.patch("/:id/withdraw", async (req, res) => {
+router.patch("/:id/withdraw", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
-        const { user_id } = req.body;
+        // Only the contributor can withdraw their own contribution.
+        const user_id = req.user.user_id;
 
-        if (!isValidId(id) || !isValidId(user_id)) {
+        if (!isValidId(id)) {
             return res.status(400).json({
                 success: false,
-                message: "Valid contribution ID and user ID are required."
+                message: "Valid contribution ID is required."
             });
         }
 
