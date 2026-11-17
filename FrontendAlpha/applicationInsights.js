@@ -1,18 +1,20 @@
 
-import { ApplicationInsights } from "@microsoft/applicationinsights-web";
+const { ApplicationInsights } = require("@microsoft/applicationinsights-web");
 
 const connectionString =
-  import.meta.env.VITE_APPLICATIONINSIGHTS_CONNECTION_STRING;
+    process.env.VITE_APPLICATIONINSIGHTS_CONNECTION_STRING;
 
-const appInsights = connectionString
-  ? new ApplicationInsights({
-      config: {
-        connectionString,
-        enableAutoRouteTracking: true
-      }
-    })
-  : null;
+let appInsights = null;
 
-appInsights?.loadAppInsights();
+if (connectionString) {
+    appInsights = new ApplicationInsights({
+        config: {
+            connectionString,
+            enableAutoRouteTracking: true
+        }
+    });
 
-export default appInsights;
+    appInsights.loadAppInsights();
+}
+
+module.exports = appInsights;

@@ -1,3 +1,4 @@
+const webpack = require("webpack");
 
 const path = require("path");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
@@ -44,6 +45,12 @@ module.exports = {
   plugins: [
     new HtmlWebpackPlugin({
       template: "./index.html",
+    }),
+    new webpack.DefinePlugin({
+      "process.env.VITE_APPLICATIONINSIGHTS_CONNECTION_STRING":
+          JSON.stringify(
+              process.env.VITE_APPLICATIONINSIGHTS_CONNECTION_STRING || ""
+          ),
     }),
   ],
 
