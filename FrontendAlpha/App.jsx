@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import './App.css';
+import appInsights from './applicationInsights';
 
 // Preserve the project's existing relative /api routing and deployment configuration.
 const API_BASE = '/api';
@@ -331,6 +332,35 @@ export default function App() {
 
   // Get the ID from the authenticated user instead of using a hardcoded ID.
   const currentUserId = currentUser ? String(currentUser.user_id) : '';
+
+  // Track authenticated users for concurrent-user monitoring.
+  useEffect(() => {
+      if (!appInsights || !token || !currentUserId) {
+          return;
+      }
+
+      // Identify the logged-in user in Application Insights.
+      appInsights.setAuthenticatedUserContext(currentUserId);
+
+      // Send a heartbeat event.
+      const sendHeartbeat = () => {
+          appInsights.trackEvent({
+              name: 'UserHeartbeat'
+          });
+      };
+
+      // Send the first heartbeat immediately.
+      sendHeartbeat();
+
+      // Send another heartbeat every 30 seconds.
+      const heartbeatInterval = setInterval(sendHeartbeat, 30000);
+
+      // Stop tracking when the user logs out or changes.
+      return () => {
+          clearInterval(heartbeatInterval);
+          appInsights.clearAuthenticatedUserContext();
+      };
+  }, [token, currentUserId]);
 
   // Verify a saved token when the app loads or when a new token is received.
   useEffect(() => {

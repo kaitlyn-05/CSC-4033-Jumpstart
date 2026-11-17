@@ -12,6 +12,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@microsoft/applicationinsights-web": "^3.4.6",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
